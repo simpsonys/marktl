@@ -354,10 +354,19 @@ var require_ai = __commonJS({
     var { looksLikeHtmlDocument, sanitizeHtml } = require_sanitizer();
     var execFileAsync = promisify(execFile);
     var providerCommands = {
-      codex: { command: "codex", args: ["exec", "--ask-for-approval", "never", "-"] },
+      codex: { command: "codex", args: ["exec", "--skip-git-repo-check", "-"] },
       claude: { command: "claude", args: ["-p"] },
       gemini: { command: "gemini", args: ["-p"] }
     };
+    var loginShellPath = "/bin/zsh";
+    var cliPath = [
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+      "/usr/bin",
+      "/bin",
+      "/usr/sbin",
+      "/sbin"
+    ].join(":");
     async function convertWithAiFallback2(markdown, options = {}) {
       if (!options.provider || options.provider === "none") {
         return {
@@ -396,32 +405,55 @@ var require_ai = __commonJS({
       const prompt = buildPrompt(markdown, options);
       const timeout = Number(options.timeoutMs || 6e4);
       const command = options.cliPaths && options.cliPaths[options.provider] ? options.cliPaths[options.provider] : provider.command;
-      const { stdout } = await execFileAsync(command, provider.args, {
+      const shellCommand = [command, ...provider.args].map(shellQuote).join(" ");
+      const { stdout } = await execFileAsync(loginShellPath, ["-lc", shellCommand], {
         input: prompt,
         timeout,
-        maxBuffer: 10 * 1024 * 1024
+        maxBuffer: 10 * 1024 * 1024,
+        env: {
+          ...process.env,
+          PATH: mergePath(process.env.PATH)
+        }
       });
       return stdout;
     }
     function buildPrompt(markdown, options = {}) {
       const modeInstruction = {
-        preserve: "Preserve the source content. Improve only HTML structure, semantics, and styling.",
-        presentation: "Create a presentation-style HTML document. Summaries and visual emphasis are allowed.",
-        blog: "Create a polished blog-style HTML article. Light restructuring is allowed.",
-        landing: "Create a landing-page-style HTML document. Strong restructuring and emphasis copy are allowed."
+        preserve: "Preserve the source content. Improve semantic HTML, visual hierarchy, typography, spacing, and responsive styling. Do not summarize or remove content.",
+        presentation: "Create a premium presentation-style HTML document with section cards, strong visual rhythm, concise slide-like grouping, summaries, and visual emphasis.",
+        blog: "Create a polished editorial blog-style HTML article with refined typography, pull quotes, section rhythm, and light restructuring.",
+        landing: "Create a landing-page-style HTML document with strong hero treatment, benefit sections, emphasis copy, and deliberate visual hierarchy."
       }[options.mode || "preserve"];
+      const dynamicInstruction = options.trusted ? "Trusted mode is enabled: you may include small inline JavaScript for useful interactions, animations, toggles, table-of-contents behavior, or reveal effects. Keep it self-contained and do not load remote resources." : "Sanitized mode is enabled: do not use JavaScript, iframes, external CSS, external scripts, or remote assets. Use rich CSS-only layout and interactions instead.";
       return `Convert this Obsidian Markdown note to a complete standalone HTML document.
 Template: ${options.template || "minimal"}
 Mode: ${options.mode || "preserve"}
 Instruction: ${modeInstruction}
+Design standard: produce a refined, modern, visually designed HTML page rather than plain Markdown-looking output. Use responsive CSS, strong spacing, tasteful color, cards/sections where helpful, and readable Korean typography if the content is Korean.
+Dynamic policy: ${dynamicInstruction}
 Return only HTML. Do not wrap it in Markdown fences.
 
 ${markdown}`;
     }
+    function mergePath(existingPath = "") {
+      const seen = /* @__PURE__ */ new Set();
+      return [...cliPath.split(":"), ...String(existingPath).split(":")].filter(Boolean).filter((entry) => {
+        if (seen.has(entry)) {
+          return false;
+        }
+        seen.add(entry);
+        return true;
+      }).join(":");
+    }
+    function shellQuote(value) {
+      return `'${String(value).replace(/'/g, `'\\''`)}'`;
+    }
     module2.exports = {
       buildPrompt,
       convertWithAiFallback: convertWithAiFallback2,
-      runCliProvider
+      mergePath,
+      runCliProvider,
+      shellQuote
     };
   }
 });

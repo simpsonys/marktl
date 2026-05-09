@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 
 const { convertMarkdownToHtml } = require('../src/core/converter.js');
 const { sanitizeHtml } = require('../src/core/sanitizer.js');
-const { convertWithAiFallback } = require('../src/core/ai.js');
+const { buildPrompt, convertWithAiFallback, mergePath, shellQuote } = require('../src/core/ai.js');
 
 test('local conversion renders frontmatter, callouts, embeds, and Markdown content', () => {
   const markdown = `---
@@ -80,4 +80,31 @@ test('AI conversion falls back by default and stops in strict mode', async () =>
     }),
     /missing CLI/,
   );
+});
+
+test('AI prompt asks for designed output and gates dynamic HTML by trusted mode', () => {
+  const sanitizedPrompt = buildPrompt('# Note', {
+    mode: 'presentation',
+    template: 'deck',
+    trusted: false,
+  });
+  const trustedPrompt = buildPrompt('# Note', {
+    mode: 'presentation',
+    template: 'deck',
+    trusted: true,
+  });
+
+  assert.match(sanitizedPrompt, /refined, modern, visually designed HTML page/);
+  assert.match(sanitizedPrompt, /do not use JavaScript/);
+  assert.match(trustedPrompt, /you may include small inline JavaScript/);
+  assert.match(trustedPrompt, /do not load remote resources/);
+});
+
+test('CLI shell helpers preserve paths with spaces and prepend common Node locations', () => {
+  assert.equal(shellQuote("/tmp/my cli's/bin/codex"), "'/tmp/my cli'\\''s/bin/codex'");
+
+  const path = mergePath('/custom/bin:/opt/homebrew/bin');
+  assert.equal(path.split(':')[0], '/opt/homebrew/bin');
+  assert.equal(path.includes('/usr/local/bin'), true);
+  assert.equal(path.includes('/custom/bin'), true);
 });
