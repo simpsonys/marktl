@@ -8,9 +8,21 @@ test('ships multiple selectable templates for advanced conversion', () => {
 
   assert.deepEqual(
     templates.map((template) => template.id),
-    ['minimal', 'editorial', 'deck', 'dashboard', 'investor-brief', 'research-memo', 'interactive-report'],
+    ['minimal', 'editorial', 'deck', 'dashboard', 'investor-brief', 'research-memo', 'interactive-report', 'playground'],
   );
   assert.equal(getTemplate('missing').id, 'minimal');
+});
+
+test('playground template provides editable controls and copyable state in trusted mode', () => {
+  const html = wrapWithTemplate('<h1>Play</h1><h2>Option</h2>', {
+    template: 'playground',
+    trusted: true,
+  });
+
+  assert.match(html, /contenteditable="true"/);
+  assert.match(html, /type="range"/);
+  assert.match(html, /Copy state JSON/);
+  assert.match(html, /Copy prompt/);
 });
 
 test('interactive scripts are included only for trusted template exports', () => {

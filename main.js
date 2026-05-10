@@ -79,6 +79,15 @@ var require_presets = __commonJS({
         template: "editorial",
         mode: "blog",
         previewSecurity: "sanitized"
+      },
+      {
+        id: "playground",
+        name: "Playground",
+        description: "Editable working surface with sliders and copyable state.",
+        artifactType: "interactive-explainer",
+        template: "playground",
+        mode: "presentation",
+        previewSecurity: "trusted"
       }
     ];
     function listExportPresets2() {
@@ -343,6 +352,67 @@ var require_templates = __commonJS({
         });
         document.querySelector('main').prepend(toc);
       }
+    `
+      },
+      {
+        id: "playground",
+        name: "Playground",
+        description: "Purpose-built working surface with editable notes, sliders, and copyable state.",
+        css: `
+      body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f7f6; color: #16201d; }
+      main { max-width: 1180px; margin: 0 auto; padding: 32px 22px 72px; }
+      article { background: #ffffff; border: 1px solid #d8e2dd; border-radius: 8px; padding: 28px; }
+      h1 { font-size: 40px; line-height: 1.08; margin-top: 0; }
+      h2 { margin-top: 30px; border-top: 1px solid #d8e2dd; padding-top: 20px; color: #10433b; }
+      p, li { line-height: 1.66; }
+      table { width: 100%; border-collapse: collapse; margin: 18px 0; }
+      th, td { border: 1px solid #d8e2dd; padding: 10px; vertical-align: top; }
+      pre { overflow: auto; background: #101820; color: #f8fafc; padding: 16px; border-radius: 8px; }
+      img { max-width: 100%; height: auto; border-radius: 8px; }
+      .playground-panel { position: sticky; top: 12px; z-index: 9; display: grid; grid-template-columns: minmax(220px, 1fr) auto auto; gap: 10px; align-items: center; background: #ffffff; border: 1px solid #bdd6ce; border-radius: 8px; padding: 12px; margin-bottom: 16px; box-shadow: 0 12px 30px rgba(16, 67, 59, .08); }
+      .playground-panel input[type="range"] { width: 100%; }
+      .playground-panel button { border: 1px solid #9bc4b8; background: #e7f5ef; color: #10433b; border-radius: 6px; padding: 8px 10px; cursor: pointer; }
+      .playground-panel button:hover { background: #d9eee6; }
+      .playground-note { min-height: 90px; border: 1px dashed #9bc4b8; border-radius: 8px; padding: 12px; background: #fbfefd; outline: none; }
+      .playground-note:focus { border-style: solid; box-shadow: 0 0 0 3px rgba(42, 157, 143, .15); }
+      .playground-muted { color: #5f6f69; font-size: 13px; }
+      .playground-emphasis-low h2 { font-size: 22px; }
+      .playground-emphasis-medium h2 { font-size: 28px; }
+      .playground-emphasis-high h2 { font-size: 34px; }
+      @media (max-width: 720px) { .playground-panel { grid-template-columns: 1fr; } article { padding: 20px; } }
+    `,
+        script: `
+      const article = document.querySelector('article');
+      const panel = document.createElement('div');
+      panel.className = 'playground-panel';
+      panel.innerHTML = '<label><span class="playground-muted">Emphasis</span><input type="range" min="1" max="3" value="2" aria-label="Emphasis"></label><button type="button" data-action="copy-prompt">Copy prompt</button><button type="button" data-action="copy-state">Copy state JSON</button>';
+      document.querySelector('main').prepend(panel);
+      const note = document.createElement('section');
+      note.innerHTML = '<h2>Working notes</h2><div class="playground-note" contenteditable="true" role="textbox" aria-label="Working notes">Edit this area while reviewing the artifact. Use Copy prompt or Copy state JSON to bring the result back to your AI session.</div>';
+      article.prepend(note);
+      const applyEmphasis = () => {
+        article.classList.remove('playground-emphasis-low', 'playground-emphasis-medium', 'playground-emphasis-high');
+        article.classList.add(['playground-emphasis-low', 'playground-emphasis-medium', 'playground-emphasis-high'][Number(panel.querySelector('input').value) - 1]);
+      };
+      panel.querySelector('input').addEventListener('input', applyEmphasis);
+      applyEmphasis();
+      const state = () => ({
+        emphasis: Number(panel.querySelector('input').value),
+        workingNotes: document.querySelector('.playground-note').innerText.trim(),
+        outline: [...document.querySelectorAll('article h1, article h2, article h3')].map((heading) => ({ level: heading.tagName, text: heading.innerText.trim() })),
+      });
+      const copy = async (button, text) => {
+        const original = button.textContent;
+        try {
+          await navigator.clipboard.writeText(text);
+          button.textContent = 'Copied';
+        } catch {
+          button.textContent = 'Copy failed';
+        }
+        setTimeout(() => { button.textContent = original; }, 1200);
+      };
+      panel.querySelector('[data-action="copy-state"]').addEventListener('click', (event) => copy(event.currentTarget, JSON.stringify(state(), null, 2)));
+      panel.querySelector('[data-action="copy-prompt"]').addEventListener('click', (event) => copy(event.currentTarget, 'Use this reviewed HTML artifact state as feedback for the next iteration:\\n\\n' + JSON.stringify(state(), null, 2)));
     `
       }
     ];
@@ -881,7 +951,7 @@ ${markdown}`;
         "strategy-brief": "Create an executive strategy brief with TL;DR, decision context, options, tradeoffs, risks, recommendation, and next actions.",
         "research-report": "Create a research report with abstract, key findings, evidence sections, source notes, diagrams or tables where useful, and implications.",
         "decision-memo": "Create a decision memo optimized for choosing: question, criteria, options, comparison matrix, recommendation, dissenting view, and decision log.",
-        "interactive-explainer": "Create an interactive explainer with progressive disclosure, visual examples, generated TOC, copy buttons, and self-contained controls in trusted mode.",
+        "interactive-explainer": "Create an interactive explainer with progressive disclosure, visual examples, generated TOC, copy buttons, editable local controls, sliders or filters when useful, and self-contained export/copy state in trusted mode.",
         "slide-deck": "Create a slide-like artifact with concise sections, strong headings, visual rhythm, and one idea per section while preserving source meaning."
       }[artifactType] || "Render a readable, useful HTML artifact from the note.";
     }
@@ -1526,13 +1596,52 @@ var MarktlPreviewView = class extends import_obsidian3.ItemView {
     for (const warning of this.state.warnings) {
       container.createDiv({ cls: "marktl-preview-warning", text: warning });
     }
+    const renderQa = container.createDiv({ cls: "marktl-preview-render-qa", text: "Render QA: waiting for preview..." });
     const frame = container.createEl("iframe", {
       cls: "marktl-preview-frame",
       attr: {
-        sandbox: this.state.trusted ? "allow-same-origin allow-scripts" : ""
+        sandbox: this.state.trusted ? "allow-same-origin allow-scripts" : "allow-same-origin"
       }
     });
+    frame.addEventListener("load", () => {
+      this.runRenderQa(frame, renderQa);
+    });
     frame.srcdoc = this.state.html;
+  }
+  runRenderQa(frame, statusEl) {
+    var _a, _b, _c, _d;
+    try {
+      const doc = frame.contentDocument;
+      if (!doc) {
+        statusEl.setText("Render QA: unable to inspect preview document.");
+        statusEl.addClass("marktl-preview-render-qa-warning");
+        return;
+      }
+      const warnings = [];
+      const bodyText = ((_b = (_a = doc.body) == null ? void 0 : _a.innerText) == null ? void 0 : _b.trim()) || "";
+      if (bodyText.length < 20) {
+        warnings.push("preview appears nearly empty");
+      }
+      if (!doc.querySelector("h1")) {
+        warnings.push("no visible H1");
+      }
+      const brokenImages = Array.from(doc.images).filter((image) => image.complete && image.naturalWidth === 0);
+      if (brokenImages.length > 0) {
+        warnings.push(`${brokenImages.length} broken image(s)`);
+      }
+      if (this.state.trusted && !doc.querySelector('button,input,select,textarea,[contenteditable="true"]')) {
+        warnings.push("trusted preview has no interactive controls");
+      }
+      const scrollHeight = ((_c = doc.scrollingElement) == null ? void 0 : _c.scrollHeight) || ((_d = doc.body) == null ? void 0 : _d.scrollHeight) || 0;
+      if (scrollHeight > 0 && scrollHeight < 120) {
+        warnings.push("rendered content is unusually short");
+      }
+      statusEl.setText(warnings.length > 0 ? `Render QA: ${warnings.join("; ")}.` : "Render QA: preview loaded, content and assets look reachable.");
+      statusEl.toggleClass("marktl-preview-render-qa-warning", warnings.length > 0);
+    } catch (error) {
+      statusEl.setText("Render QA: preview inspection was blocked by iframe security.");
+      statusEl.addClass("marktl-preview-render-qa-warning");
+    }
   }
 };
 

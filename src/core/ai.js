@@ -194,7 +194,7 @@ function getArtifactInstruction(artifactType) {
     'strategy-brief': 'Create an executive strategy brief with TL;DR, decision context, options, tradeoffs, risks, recommendation, and next actions.',
     'research-report': 'Create a research report with abstract, key findings, evidence sections, source notes, diagrams or tables where useful, and implications.',
     'decision-memo': 'Create a decision memo optimized for choosing: question, criteria, options, comparison matrix, recommendation, dissenting view, and decision log.',
-    'interactive-explainer': 'Create an interactive explainer with progressive disclosure, visual examples, generated TOC, copy buttons, and self-contained controls in trusted mode.',
+    'interactive-explainer': 'Create an interactive explainer with progressive disclosure, visual examples, generated TOC, copy buttons, editable local controls, sliders or filters when useful, and self-contained export/copy state in trusted mode.',
     'slide-deck': 'Create a slide-like artifact with concise sections, strong headings, visual rhythm, and one idea per section while preserving source meaning.',
   }[artifactType] || 'Render a readable, useful HTML artifact from the note.';
 }

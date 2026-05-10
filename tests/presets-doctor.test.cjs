@@ -14,9 +14,11 @@ test('ships beginner-facing HTML value presets', () => {
     'presentation',
     'decision-memo',
     'shareable-article',
+    'playground',
   ]);
   assert.equal(findExportPreset('interactive-report').previewSecurity, 'trusted');
   assert.equal(findExportPreset('shareable-article').mode, 'blog');
+  assert.equal(findExportPreset('playground').template, 'playground');
   assert.equal(findExportPreset('missing'), null);
 });
 

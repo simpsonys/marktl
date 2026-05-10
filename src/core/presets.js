@@ -44,6 +44,15 @@ const exportPresets = [
     mode: 'blog',
     previewSecurity: 'sanitized',
   },
+  {
+    id: 'playground',
+    name: 'Playground',
+    description: 'Editable working surface with sliders and copyable state.',
+    artifactType: 'interactive-explainer',
+    template: 'playground',
+    mode: 'presentation',
+    previewSecurity: 'trusted',
+  },
 ];
 
 function listExportPresets() {

@@ -60,8 +60,10 @@ Included templates:
 - `investor-brief`
 - `research-memo`
 - `interactive-report`
+- `playground`
 
 `interactive-report` can include trusted-mode interactive controls such as progress, generated TOC, collapsible sections, "copy as prompt", "copy as markdown", and "copy summary".
+`playground` adds an editable working-notes area, an emphasis slider, "copy prompt", and "copy state JSON" so the HTML file can act as a small review interface.
 
 ### How To Install With BRAT
 
@@ -84,7 +86,7 @@ https://github.com/reallygood83/marktl
    - `Use Claude`: checks Claude Code CLI installation and login.
    - `Prepare sharing`: creates static-hosting-ready bundles.
 3. Click the MarkTL ribbon icon, or run `Export active note to HTML...` from the command palette.
-4. Choose an HTML preset such as `Readable Note`, `Interactive Report`, `Presentation`, `Decision Memo`, or `Shareable Article`.
+4. Choose an HTML preset such as `Readable Note`, `Interactive Report`, `Presentation`, `Decision Memo`, `Shareable Article`, or `Playground`.
 5. In the export modal, adjust:
    - Artifact type
    - Template
@@ -111,11 +113,11 @@ Context packs are supporting material only. The active note remains the source o
 
 ### Interactive Controls
 
-In `Trusted interactive preview`, the `interactive-report` template can add local-only controls such as generated contents, collapsible sections, reading progress, section filtering, expand all, copy as prompt, copy as markdown, copy summary, and copy outline JSON.
+In `Trusted interactive preview`, the `interactive-report` template can add local-only controls such as generated contents, collapsible sections, reading progress, section filtering, expand all, copy as prompt, copy as markdown, copy summary, and copy outline JSON. The `playground` template adds editable review notes, an emphasis slider, and copyable state JSON for iterative work.
 
 ### Export QA
 
-MarkTL runs a basic post-generation HTML QA pass before writing and previewing the result. It warns about missing document structure, missing responsive viewport, missing CSS, trusted exports with no script, dynamic markup in sanitized mode, missing bundled image references, and missing image alt text.
+MarkTL runs a basic post-generation HTML QA pass before writing and previewing the result. It warns about missing document structure, missing responsive viewport, missing CSS, trusted exports with no script, dynamic markup in sanitized mode, missing bundled image references, and missing image alt text. The internal preview also runs a render QA pass after the iframe loads to flag nearly empty output, missing H1, broken images, unusually short renders, or trusted previews with no controls.
 
 ### AI Providers
 
@@ -273,8 +275,10 @@ Export 모달에서 artifact type을 선택할 수 있습니다.
 - `investor-brief`
 - `research-memo`
 - `interactive-report`
+- `playground`
 
 `interactive-report`는 trusted mode에서 progress bar, 자동 목차, 섹션 접기/펼치기, `copy as prompt`, `copy as markdown`, `copy summary` 같은 기능을 포함할 수 있습니다.
+`playground`는 편집 가능한 working notes, 강조도 slider, `copy prompt`, `copy state JSON`을 제공해서 HTML 파일을 작은 리뷰 인터페이스처럼 사용할 수 있게 합니다.
 
 ### BRAT으로 설치하는 방법
 
@@ -297,7 +301,7 @@ https://github.com/reallygood83/marktl
    - `Use Claude`: Claude Code CLI 설치와 로그인 상태 확인
    - `Prepare sharing`: 정적 호스팅용 bundle 생성
 3. MarkTL 리본 아이콘을 클릭하거나 명령 팔레트에서 `Export active note to HTML...`을 실행합니다.
-4. `Readable Note`, `Interactive Report`, `Presentation`, `Decision Memo`, `Shareable Article` 같은 HTML preset을 선택합니다.
+4. `Readable Note`, `Interactive Report`, `Presentation`, `Decision Memo`, `Shareable Article`, `Playground` 같은 HTML preset을 선택합니다.
 5. Export 모달에서 다음을 조정합니다.
    - Artifact type
    - Template
@@ -324,11 +328,11 @@ Context pack은 보조 자료입니다. 현재 열린 노트가 항상 기준이
 
 ### 인터랙티브 컨트롤
 
-`Trusted interactive preview`에서 `interactive-report` 템플릿은 자동 목차, 접기/펼치기, 읽기 progress, 섹션 필터, 전체 펼치기, copy as prompt, copy as markdown, copy summary, copy outline JSON 같은 로컬 전용 컨트롤을 넣을 수 있습니다.
+`Trusted interactive preview`에서 `interactive-report` 템플릿은 자동 목차, 접기/펼치기, 읽기 progress, 섹션 필터, 전체 펼치기, copy as prompt, copy as markdown, copy summary, copy outline JSON 같은 로컬 전용 컨트롤을 넣을 수 있습니다. `playground` 템플릿은 편집 가능한 리뷰 메모, 강조도 slider, copyable state JSON을 제공합니다.
 
 ### Export QA
 
-MarkTL은 HTML을 저장하고 preview하기 전에 기본 QA를 실행합니다. 문서 구조, responsive viewport, inline CSS, trusted mode의 script 유무, sanitized mode의 동적 markup, bundled image 참조 누락, image alt 누락을 warning으로 알려줍니다.
+MarkTL은 HTML을 저장하고 preview하기 전에 기본 QA를 실행합니다. 문서 구조, responsive viewport, inline CSS, trusted mode의 script 유무, sanitized mode의 동적 markup, bundled image 참조 누락, image alt 누락을 warning으로 알려줍니다. 내부 preview는 iframe 로드 후 render QA도 실행해서 거의 빈 화면, H1 누락, 깨진 이미지, 비정상적으로 짧은 렌더, trusted preview인데 컨트롤이 없는 경우를 표시합니다.
 
 ### AI Provider
 

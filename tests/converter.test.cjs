@@ -121,7 +121,7 @@ test('AI prompt can include linked-note context packs', () => {
 
 test('artifact instructions cover work-oriented HTML outputs', () => {
   assert.match(getArtifactInstruction('strategy-brief'), /executive strategy brief/);
-  assert.match(getArtifactInstruction('interactive-explainer'), /copy buttons/);
+  assert.match(getArtifactInstruction('interactive-explainer'), /editable local controls/);
   assert.match(getArtifactInstruction('slide-deck'), /one idea per section/);
 });
 

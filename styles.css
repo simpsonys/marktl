@@ -30,6 +30,20 @@
   padding: 6px 8px;
 }
 
+.marktl-preview-render-qa {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  margin: 0 10px;
+  padding: 6px 8px;
+}
+
+.marktl-preview-render-qa-warning {
+  border-color: var(--background-modifier-error);
+  color: var(--text-error);
+}
+
 .marktl-preview-frame {
   border: 0;
   flex: 1 1 auto;
