@@ -134,10 +134,11 @@ export class MarktlExportModal extends Modal {
 
     new Setting(contentEl)
       .setName('Share target')
-      .setDesc('Static bundle creates share/<slug>/index.html for GitHub Pages or any static host.')
+      .setDesc('GitHub Pages publishes share/<slug>/index.html and copies a public URL.')
       .addDropdown((dropdown) => dropdown
         .addOption('local-link', 'Local file link')
         .addOption('static-bundle', 'Static hosting bundle')
+        .addOption('github-pages', 'GitHub Pages link')
         .setValue(this.options.shareTarget)
         .onChange((value) => {
           this.options.shareTarget = value as ShareTarget;

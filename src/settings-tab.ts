@@ -135,15 +135,28 @@ export class MarktlSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('Share target')
-      .setDesc('Local link copies the export file. Static bundle writes share/<slug>/index.html for hosting.')
+      .setDesc('GitHub Pages publishes the generated bundle and copies a public URL.')
       .addDropdown((dropdown) => dropdown
         .addOption('local-link', 'Local file link')
         .addOption('static-bundle', 'Static hosting bundle')
+        .addOption('github-pages', 'GitHub Pages link')
         .setValue(this.plugin.settings.shareTarget)
         .onChange(async (value) => {
           this.plugin.settings.shareTarget = value as ShareTarget;
           await this.plugin.saveSettings();
         }));
+
+    containerEl.createEl('h3', { text: 'GitHub Pages publishing' });
+    containerEl.createEl('p', {
+      cls: 'marktl-modal-intro',
+      text: 'Used only when Share target is GitHub Pages link. Tokens are stored in this plugin data file, so use a fine-grained token limited to the share repository.',
+    });
+
+    this.addTextSetting(containerEl, 'GitHub repository', 'owner/repo for the Pages repository.', 'githubRepo', 'reallygood83/marktl-shares');
+    this.addTextSetting(containerEl, 'GitHub branch', 'Branch to write files to.', 'githubBranch', 'main');
+    this.addTextSetting(containerEl, 'GitHub Pages base URL', 'Public Pages root URL. Leave blank to infer https://owner.github.io/repo.', 'githubPagesBaseUrl', 'https://reallygood83.github.io/marktl-shares');
+    this.addTextSetting(containerEl, 'Publish path', 'Folder path inside the repository. Exports go to <path>/<slug>/index.html.', 'githubPublishPath', 'marktl');
+    this.addTextSetting(containerEl, 'GitHub token', 'Fine-grained token with Contents read/write permission for the repository.', 'githubToken', 'github_pat_...', true);
 
     new Setting(containerEl)
       .setName('Copy share link by default')
@@ -167,5 +180,30 @@ export class MarktlSettingTab extends PluginSettingTab {
           this.plugin.settings[key] = value.trim();
           await this.plugin.saveSettings();
         }));
+  }
+
+  private addTextSetting(
+    containerEl: HTMLElement,
+    name: string,
+    description: string,
+    key: 'githubRepo' | 'githubBranch' | 'githubPagesBaseUrl' | 'githubPublishPath' | 'githubToken',
+    placeholder: string,
+    password = false,
+  ): void {
+    new Setting(containerEl)
+      .setName(name)
+      .setDesc(description)
+      .addText((text) => {
+        text
+          .setPlaceholder(placeholder)
+          .setValue(this.plugin.settings[key])
+          .onChange(async (value) => {
+            this.plugin.settings[key] = value.trim();
+            await this.plugin.saveSettings();
+          });
+        if (password) {
+          text.inputEl.type = 'password';
+        }
+      });
   }
 }

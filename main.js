@@ -1067,6 +1067,74 @@ var require_provider_doctor = __commonJS({
   }
 });
 
+// src/core/github-pages.js
+var require_github_pages = __commonJS({
+  "src/core/github-pages.js"(exports2, module2) {
+    "use strict";
+    var path = require("node:path");
+    function parseRepo2(value) {
+      const cleaned = String(value || "").trim().replace(/^https:\/\/github\.com\//i, "").replace(/\.git$/i, "").replace(/^\/+|\/+$/g, "");
+      const [owner, repo] = cleaned.split("/");
+      if (!owner || !repo) {
+        return null;
+      }
+      return { owner, repo };
+    }
+    function normalizePublishPath(value) {
+      return String(value || "").trim().replace(/^\/+|\/+$/g, "").replace(/\\/g, "/").replace(/\/+/g, "/");
+    }
+    function buildPublishPath2(basePath, slug, filePath) {
+      return [normalizePublishPath(basePath), slug, filePath].filter(Boolean).join("/").replace(/\/+/g, "/");
+    }
+    function buildPagesUrl2(baseUrl, basePath, slug) {
+      const root = String(baseUrl || "").trim().replace(/\/+$/g, "");
+      if (!root) {
+        return "";
+      }
+      const suffix = [normalizePublishPath(basePath), slug].filter(Boolean).map((part) => encodePathPart(part)).join("/");
+      return `${root}/${suffix ? `${suffix}/` : ""}`;
+    }
+    function encodePathPart(value) {
+      return String(value || "").split("/").map((part) => encodeURIComponent(part)).join("/");
+    }
+    function inferPagesBaseUrl2(repoValue) {
+      const repo = parseRepo2(repoValue);
+      if (!repo) {
+        return "";
+      }
+      if (repo.repo.toLowerCase() === `${repo.owner.toLowerCase()}.github.io`) {
+        return `https://${repo.repo}`;
+      }
+      return `https://${repo.owner}.github.io/${repo.repo}`;
+    }
+    function mimeTypeForPath(filePath) {
+      const extension = path.extname(filePath).toLowerCase();
+      return {
+        ".html": "text/html; charset=utf-8",
+        ".md": "text/markdown; charset=utf-8",
+        ".css": "text/css; charset=utf-8",
+        ".js": "application/javascript",
+        ".json": "application/json",
+        ".svg": "image/svg+xml",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".avif": "image/avif"
+      }[extension] || "application/octet-stream";
+    }
+    module2.exports = {
+      buildPagesUrl: buildPagesUrl2,
+      buildPublishPath: buildPublishPath2,
+      inferPagesBaseUrl: inferPagesBaseUrl2,
+      mimeTypeForPath,
+      normalizePublishPath,
+      parseRepo: parseRepo2
+    };
+  }
+});
+
 // src/main.ts
 var main_exports = {};
 __export(main_exports, {
@@ -1146,7 +1214,7 @@ var MarktlExportModal = class extends import_obsidian.Modal {
     new import_obsidian.Setting(contentEl).setName("AI failure").setDesc("Fallback keeps exporting; strict stops when the CLI fails.").addDropdown((dropdown) => dropdown.addOption("fallback", "Fallback with warning").addOption("strict", "Stop on AI failure").setValue(this.options.failurePolicy).onChange((value) => {
       this.options.failurePolicy = value;
     }));
-    new import_obsidian.Setting(contentEl).setName("Share target").setDesc("Static bundle creates share/<slug>/index.html for GitHub Pages or any static host.").addDropdown((dropdown) => dropdown.addOption("local-link", "Local file link").addOption("static-bundle", "Static hosting bundle").setValue(this.options.shareTarget).onChange((value) => {
+    new import_obsidian.Setting(contentEl).setName("Share target").setDesc("GitHub Pages publishes share/<slug>/index.html and copies a public URL.").addDropdown((dropdown) => dropdown.addOption("local-link", "Local file link").addOption("static-bundle", "Static hosting bundle").addOption("github-pages", "GitHub Pages link").setValue(this.options.shareTarget).onChange((value) => {
       this.options.shareTarget = value;
     }));
     new import_obsidian.Setting(contentEl).setName("Copy share link").setDesc("Copies a local file:// link for the generated self-contained HTML.").addToggle((toggle) => toggle.setValue(this.options.copyShareLinkAfterExport).onChange((value) => {
@@ -1280,7 +1348,10 @@ var MarktlResultModal = class extends import_obsidian4.Modal {
     this.addFact(facts, "Output", this.summary.outputPath);
     this.addFact(facts, "AI", this.summary.aiProvider === "none" ? "Local converter" : this.summary.usedFallback ? `${this.summary.aiProvider} failed; local fallback used` : `${this.summary.aiProvider} generated HTML`);
     this.addFact(facts, "Images", `${this.summary.assetCount} bundled local image(s)`);
-    this.addFact(facts, "Share target", this.summary.shareTarget === "static-bundle" ? "Static hosting bundle" : "Local file link");
+    this.addFact(facts, "Share target", this.describeShareTarget());
+    if (this.summary.publicUrl) {
+      this.addFact(facts, "Public URL", this.summary.publicUrl);
+    }
     if (this.summary.warnings.length > 0) {
       contentEl.createEl("h3", { text: "Warnings" });
       const list = contentEl.createEl("ul", { cls: "marktl-summary-warnings" });
@@ -1290,10 +1361,10 @@ var MarktlResultModal = class extends import_obsidian4.Modal {
     }
     contentEl.createEl("p", {
       cls: "marktl-modal-intro",
-      text: this.summary.shareTarget === "static-bundle" ? "This folder is ready for a static host. Public upload is intentionally a separate step." : "This link opens the generated file on this computer. Public share links require a static host."
+      text: this.summary.publicUrl ? "This public URL is ready to share with other people." : this.summary.shareTarget === "static-bundle" ? "This folder is ready for a static host. Public upload is intentionally a separate step." : "This link opens the generated file on this computer. Public share links require a static host."
     });
-    new import_obsidian4.Setting(contentEl).addButton((button) => button.setButtonText("Copy local link").onClick(async () => {
-      const link = await this.copyLink(this.summary.outputPath);
+    new import_obsidian4.Setting(contentEl).addButton((button) => button.setButtonText(this.summary.publicUrl ? "Copy public link" : "Copy local link").onClick(async () => {
+      const link = await this.copyLink(this.summary.outputPath, this.summary.publicUrl);
       new import_obsidian4.Notice(`Copied: ${link}`);
     })).addButton((button) => button.setButtonText("Close").setCta().onClick(() => this.close()));
   }
@@ -1304,6 +1375,12 @@ var MarktlResultModal = class extends import_obsidian4.Modal {
     const item = container.createDiv({ cls: "marktl-summary-item" });
     item.createEl("span", { cls: "marktl-summary-label", text: label });
     item.createEl("strong", { text: value });
+  }
+  describeShareTarget() {
+    if (this.summary.shareTarget === "github-pages") {
+      return "GitHub Pages link";
+    }
+    return this.summary.shareTarget === "static-bundle" ? "Static hosting bundle" : "Local file link";
   }
 };
 
@@ -1361,10 +1438,20 @@ var MarktlSettingTab = class extends import_obsidian5.PluginSettingTab {
       await this.plugin.saveSettings();
     }));
     this.addCliPathSetting(containerEl, "Claude Code CLI path", "claudePath", "claude");
-    new import_obsidian5.Setting(containerEl).setName("Share target").setDesc("Local link copies the export file. Static bundle writes share/<slug>/index.html for hosting.").addDropdown((dropdown) => dropdown.addOption("local-link", "Local file link").addOption("static-bundle", "Static hosting bundle").setValue(this.plugin.settings.shareTarget).onChange(async (value) => {
+    new import_obsidian5.Setting(containerEl).setName("Share target").setDesc("GitHub Pages publishes the generated bundle and copies a public URL.").addDropdown((dropdown) => dropdown.addOption("local-link", "Local file link").addOption("static-bundle", "Static hosting bundle").addOption("github-pages", "GitHub Pages link").setValue(this.plugin.settings.shareTarget).onChange(async (value) => {
       this.plugin.settings.shareTarget = value;
       await this.plugin.saveSettings();
     }));
+    containerEl.createEl("h3", { text: "GitHub Pages publishing" });
+    containerEl.createEl("p", {
+      cls: "marktl-modal-intro",
+      text: "Used only when Share target is GitHub Pages link. Tokens are stored in this plugin data file, so use a fine-grained token limited to the share repository."
+    });
+    this.addTextSetting(containerEl, "GitHub repository", "owner/repo for the Pages repository.", "githubRepo", "reallygood83/marktl-shares");
+    this.addTextSetting(containerEl, "GitHub branch", "Branch to write files to.", "githubBranch", "main");
+    this.addTextSetting(containerEl, "GitHub Pages base URL", "Public Pages root URL. Leave blank to infer https://owner.github.io/repo.", "githubPagesBaseUrl", "https://reallygood83.github.io/marktl-shares");
+    this.addTextSetting(containerEl, "Publish path", "Folder path inside the repository. Exports go to <path>/<slug>/index.html.", "githubPublishPath", "marktl");
+    this.addTextSetting(containerEl, "GitHub token", "Fine-grained token with Contents read/write permission for the repository.", "githubToken", "github_pat_...", true);
     new import_obsidian5.Setting(containerEl).setName("Copy share link by default").setDesc("Copies a local file:// link after export. Public hosting is planned separately.").addToggle((toggle) => toggle.setValue(this.plugin.settings.copyShareLinkAfterExport).onChange(async (value) => {
       this.plugin.settings.copyShareLinkAfterExport = value;
       await this.plugin.saveSettings();
@@ -1375,6 +1462,17 @@ var MarktlSettingTab = class extends import_obsidian5.PluginSettingTab {
       this.plugin.settings[key] = value.trim();
       await this.plugin.saveSettings();
     }));
+  }
+  addTextSetting(containerEl, name, description, key, placeholder, password = false) {
+    new import_obsidian5.Setting(containerEl).setName(name).setDesc(description).addText((text) => {
+      text.setPlaceholder(placeholder).setValue(this.plugin.settings[key]).onChange(async (value) => {
+        this.plugin.settings[key] = value.trim();
+        await this.plugin.saveSettings();
+      });
+      if (password) {
+        text.inputEl.type = "password";
+      }
+    });
   }
 };
 
@@ -1410,8 +1508,8 @@ var MarktlSetupModal = class extends import_obsidian6.Modal {
     });
     this.addSetupCard(cards, {
       title: "Prepare sharing",
-      body: "Create static-hosting-ready folders with index.html and bundled assets.",
-      button: "Use bundle mode",
+      body: "Create GitHub Pages-ready folders and publish public links after settings are filled.",
+      button: "Use Pages mode",
       apply: () => this.applyBundleDefaults()
     });
     this.doctorEl = contentEl.createDiv({ cls: "marktl-doctor-box" });
@@ -1471,7 +1569,7 @@ var MarktlSetupModal = class extends import_obsidian6.Modal {
       template: "editorial",
       conversionMode: "blog",
       previewSecurity: "sanitized",
-      shareTarget: "static-bundle",
+      shareTarget: "github-pages",
       copyShareLinkAfterExport: true
     });
     await this.plugin.saveSettings();
@@ -1512,6 +1610,7 @@ var MarktlSetupModal = class extends import_obsidian6.Modal {
 // src/main.ts
 var { convertWithAiFallback } = require_ai();
 var { buildAssetFileName, extractMarkdownImageReferences, rewriteHtmlImageSources } = require_assets();
+var { buildPagesUrl, buildPublishPath, inferPagesBaseUrl, parseRepo } = require_github_pages();
 var { slugify } = require_html();
 var DEFAULT_SETTINGS = {
   exportFolder: "html-exports",
@@ -1523,6 +1622,11 @@ var DEFAULT_SETTINGS = {
   failurePolicy: "fallback",
   previewSecurity: "sanitized",
   shareTarget: "local-link",
+  githubRepo: "",
+  githubBranch: "main",
+  githubToken: "",
+  githubPagesBaseUrl: "",
+  githubPublishPath: "marktl",
   timeoutMs: 3e5,
   claudePath: "",
   geminiPath: "",
@@ -1657,9 +1761,15 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
       progress.addStep(result.usedFallback ? "Generated local fallback HTML." : "Generated AI HTML.");
       const html = rewriteHtmlImageSources(result.html, assetResult.mappings);
       const warnings = [...result.warnings, ...assetResult.warnings];
+      let publicUrl = "";
       progress.addStep("Writing HTML file to vault...");
       await this.copyImageAssets(assetResult.mappings);
       const outputPath = await this.writeHtmlFile(outputPlan, html, options, file.path);
+      if (options.shareTarget === "github-pages") {
+        progress.addStep("Publishing GitHub Pages bundle...");
+        publicUrl = await this.publishGithubPages(outputPlan, assetResult.mappings);
+        progress.addStep(`Published: ${publicUrl}`);
+      }
       progress.addStep("Opening internal preview pane...");
       await this.openPreview({
         html,
@@ -1668,8 +1778,8 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
         trusted: options.previewSecurity === "trusted"
       });
       if (options.copyShareLinkAfterExport) {
-        progress.addStep("Copying local share link...");
-        await this.copyShareLink(outputPath);
+        progress.addStep(publicUrl ? "Copying public share link..." : "Copying local share link...");
+        await this.copyShareLink(outputPath, publicUrl);
       }
       progress.complete(`Done: ${outputPath}`);
       this.openResultSummary({
@@ -1679,7 +1789,8 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
         assetCount: assetResult.mappings.length,
         warnings,
         shareTarget: options.shareTarget,
-        copiedShareLink: options.copyShareLinkAfterExport
+        copiedShareLink: options.copyShareLinkAfterExport,
+        publicUrl
       });
       if (result.usedFallback && options.aiProvider !== "none") {
         new import_obsidian7.Notice("AI conversion failed; local fallback HTML was generated.");
@@ -1698,15 +1809,16 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
       await this.app.vault.createFolder(folder);
     }
     const basename = slugify(source.basename);
-    const outputPath = options.shareTarget === "static-bundle" ? (0, import_obsidian7.normalizePath)(`${folder}/share/${basename}/index.html`) : (0, import_obsidian7.normalizePath)(`${folder}/${basename}.html`);
-    const assetFolder = options.shareTarget === "static-bundle" ? (0, import_obsidian7.normalizePath)(`${folder}/share/${basename}/assets`) : (0, import_obsidian7.normalizePath)(`${folder}/${basename}-assets`);
-    const assetRelativePrefix = options.shareTarget === "static-bundle" ? "assets" : `${basename}-assets`;
+    const bundled = options.shareTarget === "static-bundle" || options.shareTarget === "github-pages";
+    const outputPath = bundled ? (0, import_obsidian7.normalizePath)(`${folder}/share/${basename}/index.html`) : (0, import_obsidian7.normalizePath)(`${folder}/${basename}.html`);
+    const assetFolder = bundled ? (0, import_obsidian7.normalizePath)(`${folder}/share/${basename}/assets`) : (0, import_obsidian7.normalizePath)(`${folder}/${basename}-assets`);
+    const assetRelativePrefix = bundled ? "assets" : `${basename}-assets`;
     return { folder, basename, outputPath, assetFolder, assetRelativePrefix };
   }
   async writeHtmlFile(plan, html, options, sourcePath) {
     await this.ensureParentFolder(plan.outputPath);
     await this.app.vault.adapter.write(plan.outputPath, html);
-    if (options.shareTarget === "static-bundle") {
+    if (options.shareTarget === "static-bundle" || options.shareTarget === "github-pages") {
       await this.writeShareReadme(plan.folder, plan.basename, sourcePath, options);
     }
     return plan.outputPath;
@@ -1816,10 +1928,86 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
     ].join("\n");
     await this.app.vault.adapter.write(readmePath, content);
   }
-  openResultSummary(summary) {
-    new MarktlResultModal(this.app, summary, (outputPath) => this.copyShareLink(outputPath)).open();
+  async publishGithubPages(plan, mappings) {
+    const repo = parseRepo(this.settings.githubRepo);
+    if (!repo) {
+      throw new Error("GitHub Pages repo is not configured. Use owner/repo in MarkTL settings.");
+    }
+    if (!this.settings.githubToken.trim()) {
+      throw new Error("GitHub token is not configured. Add a token with Contents write permission in MarkTL settings.");
+    }
+    const branch = this.settings.githubBranch.trim() || "main";
+    const basePath = this.settings.githubPublishPath;
+    const pagesBaseUrl = this.settings.githubPagesBaseUrl.trim() || inferPagesBaseUrl(this.settings.githubRepo);
+    const files = [
+      { localPath: plan.outputPath, publishPath: buildPublishPath(basePath, plan.basename, "index.html") },
+      { localPath: (0, import_obsidian7.normalizePath)(`${plan.folder}/share/${plan.basename}/README.md`), publishPath: buildPublishPath(basePath, plan.basename, "README.md") },
+      ...mappings.map((mapping) => ({
+        localPath: mapping.destinationPath,
+        publishPath: buildPublishPath(basePath, plan.basename, `assets/${mapping.destinationPath.split("/").pop() || "asset"}`)
+      }))
+    ];
+    for (const file of files) {
+      const binary = await this.app.vault.adapter.readBinary(file.localPath);
+      await this.putGithubFile(repo.owner, repo.repo, branch, file.publishPath, binary);
+    }
+    return buildPagesUrl(pagesBaseUrl, basePath, plan.basename);
   }
-  async copyShareLink(outputPath) {
+  async putGithubFile(owner, repo, branch, publishPath, data) {
+    var _a;
+    const token = this.settings.githubToken.trim();
+    const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${publishPath.split("/").map(encodeURIComponent).join("/")}`;
+    const existing = await (0, import_obsidian7.requestUrl)({
+      url: `${url}?ref=${encodeURIComponent(branch)}`,
+      method: "GET",
+      headers: this.githubHeaders(token),
+      throw: false
+    });
+    const existingJson = existing.status >= 200 && existing.status < 300 ? existing.json : null;
+    const response = await (0, import_obsidian7.requestUrl)({
+      url,
+      method: "PUT",
+      headers: {
+        ...this.githubHeaders(token),
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        message: `Publish MarkTL export ${publishPath}`,
+        content: this.arrayBufferToBase64(data),
+        branch,
+        sha: existingJson == null ? void 0 : existingJson.sha
+      }),
+      throw: false
+    });
+    if (response.status < 200 || response.status >= 300) {
+      const message = ((_a = response.json) == null ? void 0 : _a.message) || response.text || `GitHub upload failed with HTTP ${response.status}`;
+      throw new Error(`GitHub upload failed for ${publishPath}: ${message}`);
+    }
+  }
+  githubHeaders(token) {
+    return {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28"
+    };
+  }
+  arrayBufferToBase64(data) {
+    const bytes = new Uint8Array(data);
+    let binary = "";
+    for (let index = 0; index < bytes.length; index += 1) {
+      binary += String.fromCharCode(bytes[index]);
+    }
+    return btoa(binary);
+  }
+  openResultSummary(summary) {
+    new MarktlResultModal(this.app, summary, (outputPath, preferredLink) => this.copyShareLink(outputPath, preferredLink)).open();
+  }
+  async copyShareLink(outputPath, preferredLink = "") {
+    if (preferredLink) {
+      await navigator.clipboard.writeText(preferredLink);
+      new import_obsidian7.Notice("HTML share link copied.");
+      return preferredLink;
+    }
     const adapter = this.app.vault.adapter;
     const fullPath = adapter.getFullPath ? adapter.getFullPath(outputPath) : outputPath;
     const link = fullPath.startsWith("/") ? `file://${encodeURI(fullPath)}` : outputPath;

@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile, WorkspaceLeaf, normalizePath } from 'obsidian';
+import { Notice, Plugin, TFile, WorkspaceLeaf, normalizePath, requestUrl } from 'obsidian';
 import { MarktlExportModal } from './export-modal';
 import { MarktlProgressModal } from './progress-modal';
 import { MarktlPreviewView, VIEW_TYPE_MARKTL_PREVIEW } from './preview-view';
@@ -9,6 +9,7 @@ import type { ExportOptions, ExportSummary, MarktlSettings, PreviewState } from 
 
 const { convertWithAiFallback } = require('./core/ai.js');
 const { buildAssetFileName, extractMarkdownImageReferences, rewriteHtmlImageSources } = require('./core/assets.js');
+const { buildPagesUrl, buildPublishPath, inferPagesBaseUrl, parseRepo } = require('./core/github-pages.js');
 const { slugify } = require('./core/html.js');
 
 const DEFAULT_SETTINGS: MarktlSettings = {
@@ -21,6 +22,11 @@ const DEFAULT_SETTINGS: MarktlSettings = {
   failurePolicy: 'fallback',
   previewSecurity: 'sanitized',
   shareTarget: 'local-link',
+  githubRepo: '',
+  githubBranch: 'main',
+  githubToken: '',
+  githubPagesBaseUrl: '',
+  githubPublishPath: 'marktl',
   timeoutMs: 300000,
   claudePath: '',
   geminiPath: '',
@@ -189,10 +195,16 @@ export default class MarktlPlugin extends Plugin {
       progress.addStep(result.usedFallback ? 'Generated local fallback HTML.' : 'Generated AI HTML.');
       const html = rewriteHtmlImageSources(result.html, assetResult.mappings);
       const warnings = [...result.warnings, ...assetResult.warnings];
+      let publicUrl = '';
 
       progress.addStep('Writing HTML file to vault...');
       await this.copyImageAssets(assetResult.mappings);
       const outputPath = await this.writeHtmlFile(outputPlan, html, options, file.path);
+      if (options.shareTarget === 'github-pages') {
+        progress.addStep('Publishing GitHub Pages bundle...');
+        publicUrl = await this.publishGithubPages(outputPlan, assetResult.mappings);
+        progress.addStep(`Published: ${publicUrl}`);
+      }
       progress.addStep('Opening internal preview pane...');
       await this.openPreview({
         html,
@@ -202,8 +214,8 @@ export default class MarktlPlugin extends Plugin {
       });
 
       if (options.copyShareLinkAfterExport) {
-        progress.addStep('Copying local share link...');
-        await this.copyShareLink(outputPath);
+        progress.addStep(publicUrl ? 'Copying public share link...' : 'Copying local share link...');
+        await this.copyShareLink(outputPath, publicUrl);
       }
 
       progress.complete(`Done: ${outputPath}`);
@@ -215,6 +227,7 @@ export default class MarktlPlugin extends Plugin {
         warnings,
         shareTarget: options.shareTarget,
         copiedShareLink: options.copyShareLinkAfterExport,
+        publicUrl,
       });
       if (result.usedFallback && options.aiProvider !== 'none') {
         new Notice('AI conversion failed; local fallback HTML was generated.');
@@ -235,13 +248,14 @@ export default class MarktlPlugin extends Plugin {
     }
 
     const basename = slugify(source.basename);
-    const outputPath = options.shareTarget === 'static-bundle'
+    const bundled = options.shareTarget === 'static-bundle' || options.shareTarget === 'github-pages';
+    const outputPath = bundled
       ? normalizePath(`${folder}/share/${basename}/index.html`)
       : normalizePath(`${folder}/${basename}.html`);
-    const assetFolder = options.shareTarget === 'static-bundle'
+    const assetFolder = bundled
       ? normalizePath(`${folder}/share/${basename}/assets`)
       : normalizePath(`${folder}/${basename}-assets`);
-    const assetRelativePrefix = options.shareTarget === 'static-bundle'
+    const assetRelativePrefix = bundled
       ? 'assets'
       : `${basename}-assets`;
 
@@ -251,7 +265,7 @@ export default class MarktlPlugin extends Plugin {
   private async writeHtmlFile(plan: OutputPlan, html: string, options: ExportOptions, sourcePath: string): Promise<string> {
     await this.ensureParentFolder(plan.outputPath);
     await this.app.vault.adapter.write(plan.outputPath, html);
-    if (options.shareTarget === 'static-bundle') {
+    if (options.shareTarget === 'static-bundle' || options.shareTarget === 'github-pages') {
       await this.writeShareReadme(plan.folder, plan.basename, sourcePath, options);
     }
     return plan.outputPath;
@@ -373,11 +387,93 @@ export default class MarktlPlugin extends Plugin {
     await this.app.vault.adapter.write(readmePath, content);
   }
 
-  private openResultSummary(summary: ExportSummary): void {
-    new MarktlResultModal(this.app, summary, (outputPath) => this.copyShareLink(outputPath)).open();
+  private async publishGithubPages(plan: OutputPlan, mappings: ImageAssetMapping[]): Promise<string> {
+    const repo = parseRepo(this.settings.githubRepo);
+    if (!repo) {
+      throw new Error('GitHub Pages repo is not configured. Use owner/repo in MarkTL settings.');
+    }
+    if (!this.settings.githubToken.trim()) {
+      throw new Error('GitHub token is not configured. Add a token with Contents write permission in MarkTL settings.');
+    }
+
+    const branch = this.settings.githubBranch.trim() || 'main';
+    const basePath = this.settings.githubPublishPath;
+    const pagesBaseUrl = this.settings.githubPagesBaseUrl.trim() || inferPagesBaseUrl(this.settings.githubRepo);
+    const files = [
+      { localPath: plan.outputPath, publishPath: buildPublishPath(basePath, plan.basename, 'index.html') },
+      { localPath: normalizePath(`${plan.folder}/share/${plan.basename}/README.md`), publishPath: buildPublishPath(basePath, plan.basename, 'README.md') },
+      ...mappings.map((mapping) => ({
+        localPath: mapping.destinationPath,
+        publishPath: buildPublishPath(basePath, plan.basename, `assets/${mapping.destinationPath.split('/').pop() || 'asset'}`),
+      })),
+    ];
+
+    for (const file of files) {
+      const binary = await this.app.vault.adapter.readBinary(file.localPath);
+      await this.putGithubFile(repo.owner, repo.repo, branch, file.publishPath, binary);
+    }
+
+    return buildPagesUrl(pagesBaseUrl, basePath, plan.basename);
   }
 
-  async copyShareLink(outputPath: string): Promise<string> {
+  private async putGithubFile(owner: string, repo: string, branch: string, publishPath: string, data: ArrayBuffer): Promise<void> {
+    const token = this.settings.githubToken.trim();
+    const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${publishPath.split('/').map(encodeURIComponent).join('/')}`;
+    const existing = await requestUrl({
+      url: `${url}?ref=${encodeURIComponent(branch)}`,
+      method: 'GET',
+      headers: this.githubHeaders(token),
+      throw: false,
+    });
+    const existingJson = existing.status >= 200 && existing.status < 300 ? existing.json : null;
+    const response = await requestUrl({
+      url,
+      method: 'PUT',
+      headers: {
+        ...this.githubHeaders(token),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: `Publish MarkTL export ${publishPath}`,
+        content: this.arrayBufferToBase64(data),
+        branch,
+        sha: existingJson?.sha,
+      }),
+      throw: false,
+    });
+    if (response.status < 200 || response.status >= 300) {
+      const message = response.json?.message || response.text || `GitHub upload failed with HTTP ${response.status}`;
+      throw new Error(`GitHub upload failed for ${publishPath}: ${message}`);
+    }
+  }
+
+  private githubHeaders(token: string): Record<string, string> {
+    return {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    };
+  }
+
+  private arrayBufferToBase64(data: ArrayBuffer): string {
+    const bytes = new Uint8Array(data);
+    let binary = '';
+    for (let index = 0; index < bytes.length; index += 1) {
+      binary += String.fromCharCode(bytes[index]);
+    }
+    return btoa(binary);
+  }
+
+  private openResultSummary(summary: ExportSummary): void {
+    new MarktlResultModal(this.app, summary, (outputPath, preferredLink) => this.copyShareLink(outputPath, preferredLink)).open();
+  }
+
+  async copyShareLink(outputPath: string, preferredLink = ''): Promise<string> {
+    if (preferredLink) {
+      await navigator.clipboard.writeText(preferredLink);
+      new Notice('HTML share link copied.');
+      return preferredLink;
+    }
     const adapter = this.app.vault.adapter as typeof this.app.vault.adapter & {
       getFullPath?: (path: string) => string;
     };

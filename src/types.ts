@@ -3,7 +3,7 @@ export type ArtifactType = 'faithful-note' | 'strategy-brief' | 'research-report
 export type ConversionMode = 'preserve' | 'presentation' | 'blog' | 'landing';
 export type FailurePolicy = 'fallback' | 'strict';
 export type PreviewSecurity = 'sanitized' | 'trusted';
-export type ShareTarget = 'local-link' | 'static-bundle';
+export type ShareTarget = 'local-link' | 'static-bundle' | 'github-pages';
 
 export interface MarktlSettings {
   exportFolder: string;
@@ -15,6 +15,11 @@ export interface MarktlSettings {
   failurePolicy: FailurePolicy;
   previewSecurity: PreviewSecurity;
   shareTarget: ShareTarget;
+  githubRepo: string;
+  githubBranch: string;
+  githubToken: string;
+  githubPagesBaseUrl: string;
+  githubPublishPath: string;
   timeoutMs: number;
   claudePath: string;
   geminiPath: string;
@@ -40,6 +45,7 @@ export interface ExportSummary {
   warnings: string[];
   shareTarget: ShareTarget;
   copiedShareLink: boolean;
+  publicUrl?: string;
 }
 
 export interface PreviewState {

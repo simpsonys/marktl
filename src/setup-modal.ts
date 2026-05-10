@@ -38,8 +38,8 @@ export class MarktlSetupModal extends Modal {
     });
     this.addSetupCard(cards, {
       title: 'Prepare sharing',
-      body: 'Create static-hosting-ready folders with index.html and bundled assets.',
-      button: 'Use bundle mode',
+      body: 'Create GitHub Pages-ready folders and publish public links after settings are filled.',
+      button: 'Use Pages mode',
       apply: () => this.applyBundleDefaults(),
     });
 
@@ -116,7 +116,7 @@ export class MarktlSetupModal extends Modal {
       template: 'editorial',
       conversionMode: 'blog' as ConversionMode,
       previewSecurity: 'sanitized' as PreviewSecurity,
-      shareTarget: 'static-bundle',
+      shareTarget: 'github-pages',
       copyShareLinkAfterExport: true,
     });
     await this.plugin.saveSettings();

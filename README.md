@@ -120,19 +120,47 @@ Use trusted mode only for content you intentionally generated and trust.
 
 ### Sharing
 
-MarkTL supports two sharing targets:
+MarkTL supports three sharing targets:
 
 - `Local file link`: copies a `file://` link to the generated HTML.
 - `Static hosting bundle`: writes:
+- `GitHub Pages link`: writes the same bundle locally, uploads it to GitHub, and copies the public Pages URL.
 
 ```text
 html-exports/share/<slug>/index.html
 html-exports/share/<slug>/README.md
+html-exports/share/<slug>/assets/<image>.png
 ```
 
-You can publish that folder with GitHub Pages, S3/R2, Netlify, Vercel, or any static host.
+`Local file link` stores files at:
 
-MarkTL does not upload vault content automatically. Public sharing should always be explicit.
+```text
+html-exports/<slug>.html
+html-exports/<slug>-assets/<image>.png
+```
+
+`Static hosting bundle` and `GitHub Pages link` always store files at:
+
+```text
+html-exports/share/<slug>/index.html
+html-exports/share/<slug>/assets/<image>.png
+```
+
+For GitHub Pages publishing, fill these settings:
+
+- `GitHub repository`: `owner/repo`
+- `GitHub branch`: usually `main`
+- `GitHub Pages base URL`: for example `https://owner.github.io/repo`
+- `Publish path`: folder inside the repository, for example `marktl`
+- `GitHub token`: fine-grained token with Contents read/write permission for that repository
+
+The public URL becomes:
+
+```text
+<GitHub Pages base URL>/<Publish path>/<slug>/
+```
+
+GitHub tokens are stored in the plugin data file. Use a dedicated repository and a narrow fine-grained token. Public publishing should always be intentional.
 
 ### Local Images
 
@@ -277,19 +305,47 @@ Trusted mode는 의도적으로 생성하고 신뢰하는 문서에만 사용하
 
 ### 공유
 
-MarkTL은 두 가지 공유 방식을 지원합니다.
+MarkTL은 세 가지 공유 방식을 지원합니다.
 
 - `Local file link`: 생성된 HTML의 `file://` 링크를 복사합니다.
 - `Static hosting bundle`: 아래 구조를 생성합니다.
+- `GitHub Pages link`: 같은 bundle을 로컬에 만들고 GitHub에 업로드한 뒤 공개 Pages URL을 복사합니다.
 
 ```text
 html-exports/share/<slug>/index.html
 html-exports/share/<slug>/README.md
+html-exports/share/<slug>/assets/<image>.png
 ```
 
-이 폴더를 GitHub Pages, S3/R2, Netlify, Vercel 등 정적 호스팅에 올릴 수 있습니다.
+`Local file link`는 아래 경로에 저장합니다.
 
-MarkTL은 vault 내용을 자동 업로드하지 않습니다. 공개 공유는 항상 사용자가 명시적으로 선택해야 합니다.
+```text
+html-exports/<slug>.html
+html-exports/<slug>-assets/<image>.png
+```
+
+`Static hosting bundle`과 `GitHub Pages link`는 항상 아래 경로에 저장합니다.
+
+```text
+html-exports/share/<slug>/index.html
+html-exports/share/<slug>/assets/<image>.png
+```
+
+GitHub Pages publish를 쓰려면 설정에 아래 값을 입력합니다.
+
+- `GitHub repository`: `owner/repo`
+- `GitHub branch`: 보통 `main`
+- `GitHub Pages base URL`: 예 `https://owner.github.io/repo`
+- `Publish path`: repo 안의 폴더, 예 `marktl`
+- `GitHub token`: 해당 repo에 Contents read/write 권한이 있는 fine-grained token
+
+공개 URL은 아래처럼 만들어집니다.
+
+```text
+<GitHub Pages base URL>/<Publish path>/<slug>/
+```
+
+GitHub token은 플러그인 데이터 파일에 저장됩니다. 전용 repo와 권한이 좁은 fine-grained token을 쓰세요. 공개 publish는 항상 사용자가 명시적으로 선택해야 합니다.
 
 ### 로컬 이미지
 
