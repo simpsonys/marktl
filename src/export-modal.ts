@@ -1,5 +1,6 @@
 import { App, Modal, Setting } from 'obsidian';
 import type MarktlPlugin from './main';
+import { listExportPresets, findExportPreset } from './core/presets.js';
 import { listTemplates } from './core/templates.js';
 import type { AiProvider, ArtifactType, ConversionMode, ExportOptions, FailurePolicy, PreviewSecurity, ShareTarget } from './types';
 
@@ -7,6 +8,7 @@ export class MarktlExportModal extends Modal {
   private options: ExportOptions;
   private plugin: MarktlPlugin;
   private onSubmit: (options: ExportOptions) => void;
+  private selectedPreset = 'custom';
 
   constructor(app: App, plugin: MarktlPlugin, onSubmit: (options: ExportOptions) => void) {
     super(app);
@@ -31,8 +33,31 @@ export class MarktlExportModal extends Modal {
 
     contentEl.createEl('p', {
       cls: 'marktl-modal-intro',
-      text: 'Choose a template, AI CLI, and preview mode for this export.',
+      text: 'Choose what the HTML should do: easier reading, interaction, presentation, or a share-ready article.',
     });
+
+    new Setting(contentEl)
+      .setName('HTML preset')
+      .setDesc('Applies sensible defaults. You can still adjust individual fields below.')
+      .addDropdown((dropdown) => {
+        dropdown.addOption('custom', 'Custom');
+        for (const preset of listExportPresets()) {
+          dropdown.addOption(preset.id, preset.name);
+        }
+        dropdown.setValue(this.selectedPreset).onChange((value) => {
+          const preset = findExportPreset(value);
+          if (!preset) {
+            this.selectedPreset = 'custom';
+            return;
+          }
+          this.selectedPreset = preset.id;
+          this.options.artifactType = preset.artifactType as ArtifactType;
+          this.options.template = preset.template;
+          this.options.conversionMode = preset.mode as ConversionMode;
+          this.options.previewSecurity = preset.previewSecurity as PreviewSecurity;
+          this.onOpen();
+        });
+      });
 
     new Setting(contentEl)
       .setName('Artifact type')

@@ -18,6 +18,16 @@ export class MarktlSettingTab extends PluginSettingTab {
     containerEl.createEl('h2', { text: 'MarkTL HTML Exporter' });
 
     new Setting(containerEl)
+      .setName('Setup wizard')
+      .setDesc('Guided setup for local export, Claude AI conversion, and share-ready bundles.')
+      .addButton((button) => button
+        .setButtonText('Open setup')
+        .setCta()
+        .onClick(() => {
+          this.plugin.openSetupWizard();
+        }));
+
+    new Setting(containerEl)
       .setName('Export folder')
       .setDesc('Vault-relative folder for generated HTML files.')
       .addText((text) => text

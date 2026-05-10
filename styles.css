@@ -59,3 +59,64 @@
   color: var(--text-error);
   font-weight: 600;
 }
+
+.marktl-setup-cards {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin: 12px 0;
+}
+
+.marktl-setup-card {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.marktl-setup-card h3 {
+  font-size: 15px;
+  margin: 0 0 6px;
+}
+
+.marktl-setup-card p {
+  color: var(--text-muted);
+  margin: 0 0 8px;
+}
+
+.marktl-doctor-box {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  margin: 12px 0;
+  padding: 10px;
+}
+
+.marktl-doctor-ok {
+  border-color: var(--background-modifier-success);
+}
+
+.marktl-doctor-error {
+  border-color: var(--background-modifier-error);
+}
+
+.marktl-summary-grid {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.marktl-summary-item {
+  border-bottom: 1px solid var(--background-modifier-border);
+  display: grid;
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.marktl-summary-label {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.marktl-summary-warnings {
+  margin: 8px 0 12px;
+}

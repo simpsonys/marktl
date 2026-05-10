@@ -30,6 +30,70 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
+// src/core/presets.js
+var require_presets = __commonJS({
+  "src/core/presets.js"(exports2, module2) {
+    "use strict";
+    var exportPresets = [
+      {
+        id: "readable-note",
+        name: "Readable Note",
+        description: "Faithful, clean reading view with better typography.",
+        artifactType: "faithful-note",
+        template: "editorial",
+        mode: "preserve",
+        previewSecurity: "sanitized"
+      },
+      {
+        id: "interactive-report",
+        name: "Interactive Report",
+        description: "HTML-native controls: table of contents, collapsible sections, copy buttons.",
+        artifactType: "interactive-explainer",
+        template: "interactive-report",
+        mode: "presentation",
+        previewSecurity: "trusted"
+      },
+      {
+        id: "presentation",
+        name: "Presentation",
+        description: "Slide-like sections for reviewing or presenting a note.",
+        artifactType: "slide-deck",
+        template: "deck",
+        mode: "presentation",
+        previewSecurity: "trusted"
+      },
+      {
+        id: "decision-memo",
+        name: "Decision Memo",
+        description: "Options, tradeoffs, risks, recommendation, and next actions.",
+        artifactType: "decision-memo",
+        template: "research-memo",
+        mode: "presentation",
+        previewSecurity: "trusted"
+      },
+      {
+        id: "shareable-article",
+        name: "Shareable Article",
+        description: "Polished article layout with bundled images and static-hosting-ready output.",
+        artifactType: "research-report",
+        template: "editorial",
+        mode: "blog",
+        previewSecurity: "sanitized"
+      }
+    ];
+    function listExportPresets2() {
+      return exportPresets.slice();
+    }
+    function findExportPreset2(id) {
+      return exportPresets.find((preset) => preset.id === id) || null;
+    }
+    module2.exports = {
+      findExportPreset: findExportPreset2,
+      listExportPresets: listExportPresets2
+    };
+  }
+});
+
 // src/core/html.js
 var require_html = __commonJS({
   "src/core/html.js"(exports2, module2) {
@@ -913,20 +977,112 @@ ${markdown}`;
   }
 });
 
+// src/core/provider-doctor.js
+var require_provider_doctor = __commonJS({
+  "src/core/provider-doctor.js"(exports2, module2) {
+    "use strict";
+    var { spawn } = require("node:child_process");
+    var { mergePath } = require_ai();
+    async function checkClaudeProvider2(options = {}) {
+      const command = options.command || "claude";
+      const timeoutMs = Number(options.timeoutMs || 15e3);
+      const runner = options.runCommand || runCommand;
+      const version = await runner(command, ["--version"], timeoutMs);
+      if (version.code !== 0) {
+        return {
+          ok: false,
+          status: "missing",
+          message: cleanDoctorOutput(version.output) || "Claude Code CLI was not found or did not start.",
+          version: ""
+        };
+      }
+      const probe = await runner(command, ["-p", "Return only this exact text: MARKTL_OK"], timeoutMs);
+      if (probe.code !== 0) {
+        const output = cleanDoctorOutput(probe.output);
+        return {
+          ok: false,
+          status: output.toLowerCase().includes("not logged in") ? "not-logged-in" : "probe-failed",
+          message: output || "Claude Code CLI is installed, but the login probe failed.",
+          version: cleanDoctorOutput(version.output)
+        };
+      }
+      return {
+        ok: /MARKTL_OK/i.test(probe.output),
+        status: /MARKTL_OK/i.test(probe.output) ? "ready" : "unexpected-output",
+        message: /MARKTL_OK/i.test(probe.output) ? "Claude Code CLI is installed, logged in, and ready." : cleanDoctorOutput(probe.output) || "Claude Code CLI responded, but not with the expected probe text.",
+        version: cleanDoctorOutput(version.output)
+      };
+    }
+    function runCommand(command, args, timeoutMs) {
+      return new Promise((resolve) => {
+        const child = spawn(command, args, {
+          env: {
+            ...process.env,
+            PATH: mergePath(process.env.PATH)
+          },
+          stdio: ["ignore", "pipe", "pipe"]
+        });
+        let output = "";
+        let settled = false;
+        const timeout = setTimeout(() => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          child.kill("SIGTERM");
+          resolve({ code: -1, output: `Provider doctor timed out after ${timeoutMs}ms.` });
+        }, timeoutMs);
+        child.stdout.on("data", (chunk) => {
+          output += chunk;
+        });
+        child.stderr.on("data", (chunk) => {
+          output += chunk;
+        });
+        child.on("error", (error) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          clearTimeout(timeout);
+          resolve({ code: -1, output: error.message });
+        });
+        child.on("close", (code) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          clearTimeout(timeout);
+          resolve({ code: code || 0, output });
+        });
+      });
+    }
+    function cleanDoctorOutput(value = "") {
+      return String(value || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, 6).join("\n");
+    }
+    module2.exports = {
+      checkClaudeProvider: checkClaudeProvider2,
+      cleanDoctorOutput,
+      runCommand
+    };
+  }
+});
+
 // src/main.ts
 var main_exports = {};
 __export(main_exports, {
   default: () => MarktlPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian5 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 
 // src/export-modal.ts
 var import_obsidian = require("obsidian");
+var import_presets = __toESM(require_presets());
 var import_templates = __toESM(require_templates());
 var MarktlExportModal = class extends import_obsidian.Modal {
   constructor(app, plugin, onSubmit) {
     super(app);
+    this.selectedPreset = "custom";
     this.plugin = plugin;
     this.onSubmit = onSubmit;
     this.options = {
@@ -946,7 +1102,26 @@ var MarktlExportModal = class extends import_obsidian.Modal {
     this.setTitle("Export note to HTML");
     contentEl.createEl("p", {
       cls: "marktl-modal-intro",
-      text: "Choose a template, AI CLI, and preview mode for this export."
+      text: "Choose what the HTML should do: easier reading, interaction, presentation, or a share-ready article."
+    });
+    new import_obsidian.Setting(contentEl).setName("HTML preset").setDesc("Applies sensible defaults. You can still adjust individual fields below.").addDropdown((dropdown) => {
+      dropdown.addOption("custom", "Custom");
+      for (const preset of (0, import_presets.listExportPresets)()) {
+        dropdown.addOption(preset.id, preset.name);
+      }
+      dropdown.setValue(this.selectedPreset).onChange((value) => {
+        const preset = (0, import_presets.findExportPreset)(value);
+        if (!preset) {
+          this.selectedPreset = "custom";
+          return;
+        }
+        this.selectedPreset = preset.id;
+        this.options.artifactType = preset.artifactType;
+        this.options.template = preset.template;
+        this.options.conversionMode = preset.mode;
+        this.options.previewSecurity = preset.previewSecurity;
+        this.onOpen();
+      });
     });
     new import_obsidian.Setting(contentEl).setName("Artifact type").setDesc("Defines the information architecture, not just the visual skin.").addDropdown((dropdown) => dropdown.addOption("faithful-note", "Faithful Note").addOption("strategy-brief", "Strategy Brief").addOption("research-report", "Research Report").addOption("decision-memo", "Decision Memo").addOption("interactive-explainer", "Interactive Explainer").addOption("slide-deck", "Slide Deck").setValue(this.options.artifactType).onChange((value) => {
       this.options.artifactType = value;
@@ -1089,10 +1264,53 @@ var MarktlPreviewView = class extends import_obsidian3.ItemView {
   }
 };
 
-// src/settings-tab.ts
+// src/result-modal.ts
 var import_obsidian4 = require("obsidian");
+var MarktlResultModal = class extends import_obsidian4.Modal {
+  constructor(app, summary, copyLink) {
+    super(app);
+    this.summary = summary;
+    this.copyLink = copyLink;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    this.setTitle("HTML export ready");
+    const facts = contentEl.createDiv({ cls: "marktl-summary-grid" });
+    this.addFact(facts, "Output", this.summary.outputPath);
+    this.addFact(facts, "AI", this.summary.aiProvider === "none" ? "Local converter" : this.summary.usedFallback ? `${this.summary.aiProvider} failed; local fallback used` : `${this.summary.aiProvider} generated HTML`);
+    this.addFact(facts, "Images", `${this.summary.assetCount} bundled local image(s)`);
+    this.addFact(facts, "Share target", this.summary.shareTarget === "static-bundle" ? "Static hosting bundle" : "Local file link");
+    if (this.summary.warnings.length > 0) {
+      contentEl.createEl("h3", { text: "Warnings" });
+      const list = contentEl.createEl("ul", { cls: "marktl-summary-warnings" });
+      for (const warning of this.summary.warnings) {
+        list.createEl("li", { text: warning });
+      }
+    }
+    contentEl.createEl("p", {
+      cls: "marktl-modal-intro",
+      text: this.summary.shareTarget === "static-bundle" ? "This folder is ready for a static host. Public upload is intentionally a separate step." : "This link opens the generated file on this computer. Public share links require a static host."
+    });
+    new import_obsidian4.Setting(contentEl).addButton((button) => button.setButtonText("Copy local link").onClick(async () => {
+      const link = await this.copyLink(this.summary.outputPath);
+      new import_obsidian4.Notice(`Copied: ${link}`);
+    })).addButton((button) => button.setButtonText("Close").setCta().onClick(() => this.close()));
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+  addFact(container, label, value) {
+    const item = container.createDiv({ cls: "marktl-summary-item" });
+    item.createEl("span", { cls: "marktl-summary-label", text: label });
+    item.createEl("strong", { text: value });
+  }
+};
+
+// src/settings-tab.ts
+var import_obsidian5 = require("obsidian");
 var import_templates2 = __toESM(require_templates());
-var MarktlSettingTab = class extends import_obsidian4.PluginSettingTab {
+var MarktlSettingTab = class extends import_obsidian5.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -1101,15 +1319,18 @@ var MarktlSettingTab = class extends import_obsidian4.PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     containerEl.createEl("h2", { text: "MarkTL HTML Exporter" });
-    new import_obsidian4.Setting(containerEl).setName("Export folder").setDesc("Vault-relative folder for generated HTML files.").addText((text) => text.setPlaceholder("html-exports").setValue(this.plugin.settings.exportFolder).onChange(async (value) => {
+    new import_obsidian5.Setting(containerEl).setName("Setup wizard").setDesc("Guided setup for local export, Claude AI conversion, and share-ready bundles.").addButton((button) => button.setButtonText("Open setup").setCta().onClick(() => {
+      this.plugin.openSetupWizard();
+    }));
+    new import_obsidian5.Setting(containerEl).setName("Export folder").setDesc("Vault-relative folder for generated HTML files.").addText((text) => text.setPlaceholder("html-exports").setValue(this.plugin.settings.exportFolder).onChange(async (value) => {
       this.plugin.settings.exportFolder = value.trim() || "html-exports";
       await this.plugin.saveSettings();
     }));
-    new import_obsidian4.Setting(containerEl).setName("Artifact type").setDesc("Default information architecture for AI exports.").addDropdown((dropdown) => dropdown.addOption("faithful-note", "Faithful Note").addOption("strategy-brief", "Strategy Brief").addOption("research-report", "Research Report").addOption("decision-memo", "Decision Memo").addOption("interactive-explainer", "Interactive Explainer").addOption("slide-deck", "Slide Deck").setValue(this.plugin.settings.artifactType).onChange(async (value) => {
+    new import_obsidian5.Setting(containerEl).setName("Artifact type").setDesc("Default information architecture for AI exports.").addDropdown((dropdown) => dropdown.addOption("faithful-note", "Faithful Note").addOption("strategy-brief", "Strategy Brief").addOption("research-report", "Research Report").addOption("decision-memo", "Decision Memo").addOption("interactive-explainer", "Interactive Explainer").addOption("slide-deck", "Slide Deck").setValue(this.plugin.settings.artifactType).onChange(async (value) => {
       this.plugin.settings.artifactType = value;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian4.Setting(containerEl).setName("Template").setDesc("Default HTML style template.").addDropdown((dropdown) => {
+    new import_obsidian5.Setting(containerEl).setName("Template").setDesc("Default HTML style template.").addDropdown((dropdown) => {
       for (const template of (0, import_templates2.listTemplates)()) {
         dropdown.addOption(template.id, template.name);
       }
@@ -1118,42 +1339,173 @@ var MarktlSettingTab = class extends import_obsidian4.PluginSettingTab {
         await this.plugin.saveSettings();
       });
     });
-    new import_obsidian4.Setting(containerEl).setName("AI provider").setDesc("Optional CLI provider for high-quality AI conversion.").addDropdown((dropdown) => dropdown.addOption("none", "None / local fallback").addOption("claude", "Claude Code CLI").setValue(this.plugin.settings.aiProvider).onChange(async (value) => {
+    new import_obsidian5.Setting(containerEl).setName("AI provider").setDesc("Optional CLI provider for high-quality AI conversion.").addDropdown((dropdown) => dropdown.addOption("none", "None / local fallback").addOption("claude", "Claude Code CLI").setValue(this.plugin.settings.aiProvider).onChange(async (value) => {
       this.plugin.settings.aiProvider = value;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian4.Setting(containerEl).setName("Conversion mode").setDesc("Preserve mode keeps the note faithful. Other modes allow AI restructuring.").addDropdown((dropdown) => dropdown.addOption("preserve", "Preserve content").addOption("presentation", "Presentation").addOption("blog", "Blog article").addOption("landing", "Landing page").setValue(this.plugin.settings.conversionMode).onChange(async (value) => {
+    new import_obsidian5.Setting(containerEl).setName("Conversion mode").setDesc("Preserve mode keeps the note faithful. Other modes allow AI restructuring.").addDropdown((dropdown) => dropdown.addOption("preserve", "Preserve content").addOption("presentation", "Presentation").addOption("blog", "Blog article").addOption("landing", "Landing page").setValue(this.plugin.settings.conversionMode).onChange(async (value) => {
       this.plugin.settings.conversionMode = value;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian4.Setting(containerEl).setName("Preview security").setDesc("Sanitized mode blocks scripts, iframes, external assets, and event handlers.").addDropdown((dropdown) => dropdown.addOption("sanitized", "Sanitized static preview").addOption("trusted", "Trusted preview/export").setValue(this.plugin.settings.previewSecurity).onChange(async (value) => {
+    new import_obsidian5.Setting(containerEl).setName("Preview security").setDesc("Sanitized mode blocks scripts, iframes, external assets, and event handlers.").addDropdown((dropdown) => dropdown.addOption("sanitized", "Sanitized static preview").addOption("trusted", "Trusted preview/export").setValue(this.plugin.settings.previewSecurity).onChange(async (value) => {
       this.plugin.settings.previewSecurity = value;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian4.Setting(containerEl).setName("AI failure policy").setDesc("Fallback creates local HTML with a warning. Strict stops generation.").addDropdown((dropdown) => dropdown.addOption("fallback", "Fallback with warning").addOption("strict", "Stop on AI failure").setValue(this.plugin.settings.failurePolicy).onChange(async (value) => {
+    new import_obsidian5.Setting(containerEl).setName("AI failure policy").setDesc("Fallback creates local HTML with a warning. Strict stops generation.").addDropdown((dropdown) => dropdown.addOption("fallback", "Fallback with warning").addOption("strict", "Stop on AI failure").setValue(this.plugin.settings.failurePolicy).onChange(async (value) => {
       this.plugin.settings.failurePolicy = value;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian4.Setting(containerEl).setName("CLI timeout").setDesc("Maximum AI CLI runtime in milliseconds. Rich HTML artifacts can take 2-5 minutes.").addText((text) => text.setPlaceholder("300000").setValue(String(this.plugin.settings.timeoutMs)).onChange(async (value) => {
+    new import_obsidian5.Setting(containerEl).setName("CLI timeout").setDesc("Maximum AI CLI runtime in milliseconds. Rich HTML artifacts can take 2-5 minutes.").addText((text) => text.setPlaceholder("300000").setValue(String(this.plugin.settings.timeoutMs)).onChange(async (value) => {
       const parsed = Number(value);
       this.plugin.settings.timeoutMs = Number.isFinite(parsed) && parsed > 0 ? parsed : 3e5;
       await this.plugin.saveSettings();
     }));
     this.addCliPathSetting(containerEl, "Claude Code CLI path", "claudePath", "claude");
-    new import_obsidian4.Setting(containerEl).setName("Share target").setDesc("Local link copies the export file. Static bundle writes share/<slug>/index.html for hosting.").addDropdown((dropdown) => dropdown.addOption("local-link", "Local file link").addOption("static-bundle", "Static hosting bundle").setValue(this.plugin.settings.shareTarget).onChange(async (value) => {
+    new import_obsidian5.Setting(containerEl).setName("Share target").setDesc("Local link copies the export file. Static bundle writes share/<slug>/index.html for hosting.").addDropdown((dropdown) => dropdown.addOption("local-link", "Local file link").addOption("static-bundle", "Static hosting bundle").setValue(this.plugin.settings.shareTarget).onChange(async (value) => {
       this.plugin.settings.shareTarget = value;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian4.Setting(containerEl).setName("Copy share link by default").setDesc("Copies a local file:// link after export. Public hosting is planned separately.").addToggle((toggle) => toggle.setValue(this.plugin.settings.copyShareLinkAfterExport).onChange(async (value) => {
+    new import_obsidian5.Setting(containerEl).setName("Copy share link by default").setDesc("Copies a local file:// link after export. Public hosting is planned separately.").addToggle((toggle) => toggle.setValue(this.plugin.settings.copyShareLinkAfterExport).onChange(async (value) => {
       this.plugin.settings.copyShareLinkAfterExport = value;
       await this.plugin.saveSettings();
     }));
   }
   addCliPathSetting(containerEl, name, key, placeholder) {
-    new import_obsidian4.Setting(containerEl).setName(name).setDesc("Leave blank to use the command from PATH.").addText((text) => text.setPlaceholder(placeholder).setValue(this.plugin.settings[key]).onChange(async (value) => {
+    new import_obsidian5.Setting(containerEl).setName(name).setDesc("Leave blank to use the command from PATH.").addText((text) => text.setPlaceholder(placeholder).setValue(this.plugin.settings[key]).onChange(async (value) => {
       this.plugin.settings[key] = value.trim();
       await this.plugin.saveSettings();
     }));
+  }
+};
+
+// src/setup-modal.ts
+var import_obsidian6 = require("obsidian");
+var { checkClaudeProvider } = require_provider_doctor();
+var MarktlSetupModal = class extends import_obsidian6.Modal {
+  constructor(app, plugin) {
+    super(app);
+    this.doctorEl = null;
+    this.plugin = plugin;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    this.setTitle("MarkTL setup");
+    contentEl.createEl("p", {
+      cls: "marktl-modal-intro",
+      text: "Choose the simplest setup that matches how you want to use HTML exports."
+    });
+    const cards = contentEl.createDiv({ cls: "marktl-setup-cards" });
+    this.addSetupCard(cards, {
+      title: "Start simple",
+      body: "Local HTML export, bundled images, safe preview. No AI setup required.",
+      button: "Use local export",
+      apply: () => this.applySimpleDefaults()
+    });
+    this.addSetupCard(cards, {
+      title: "Use Claude",
+      body: "Use Claude Code CLI for more designed reports and interactive artifacts.",
+      button: "Use Claude mode",
+      apply: () => this.applyClaudeDefaults()
+    });
+    this.addSetupCard(cards, {
+      title: "Prepare sharing",
+      body: "Create static-hosting-ready folders with index.html and bundled assets.",
+      button: "Use bundle mode",
+      apply: () => this.applyBundleDefaults()
+    });
+    this.doctorEl = contentEl.createDiv({ cls: "marktl-doctor-box" });
+    this.renderDoctorIdle();
+    new import_obsidian6.Setting(contentEl).addButton((button) => button.setButtonText("Check Claude CLI").onClick(() => {
+      void this.runDoctor();
+    })).addButton((button) => button.setButtonText("Finish setup").setCta().onClick(async () => {
+      this.plugin.settings.setupCompleted = true;
+      await this.plugin.saveSettings();
+      this.close();
+      new import_obsidian6.Notice("MarkTL setup saved.");
+    }));
+  }
+  onClose() {
+    this.contentEl.empty();
+    this.doctorEl = null;
+  }
+  addSetupCard(container, options) {
+    const card = container.createDiv({ cls: "marktl-setup-card" });
+    card.createEl("h3", { text: options.title });
+    card.createEl("p", { text: options.body });
+    new import_obsidian6.Setting(card).addButton((button) => button.setButtonText(options.button).onClick(async () => {
+      await options.apply();
+      new import_obsidian6.Notice(`${options.title} defaults applied.`);
+    }));
+  }
+  async applySimpleDefaults() {
+    Object.assign(this.plugin.settings, {
+      setupCompleted: true,
+      aiProvider: "none",
+      artifactType: "faithful-note",
+      template: "editorial",
+      conversionMode: "preserve",
+      previewSecurity: "sanitized",
+      shareTarget: "local-link"
+    });
+    await this.plugin.saveSettings();
+  }
+  async applyClaudeDefaults() {
+    Object.assign(this.plugin.settings, {
+      setupCompleted: true,
+      aiProvider: "claude",
+      artifactType: "interactive-explainer",
+      template: "interactive-report",
+      conversionMode: "presentation",
+      previewSecurity: "trusted",
+      shareTarget: "local-link"
+    });
+    await this.plugin.saveSettings();
+    await this.runDoctor();
+  }
+  async applyBundleDefaults() {
+    Object.assign(this.plugin.settings, {
+      setupCompleted: true,
+      aiProvider: this.plugin.settings.aiProvider,
+      artifactType: "research-report",
+      template: "editorial",
+      conversionMode: "blog",
+      previewSecurity: "sanitized",
+      shareTarget: "static-bundle",
+      copyShareLinkAfterExport: true
+    });
+    await this.plugin.saveSettings();
+  }
+  renderDoctorIdle() {
+    if (!this.doctorEl) {
+      return;
+    }
+    this.doctorEl.empty();
+    this.doctorEl.createEl("strong", { text: "Claude doctor" });
+    this.doctorEl.createEl("p", {
+      text: "Optional. Checks whether Claude Code CLI is installed and logged in."
+    });
+  }
+  async runDoctor() {
+    if (!this.doctorEl) {
+      return;
+    }
+    this.doctorEl.empty();
+    this.doctorEl.createEl("strong", { text: "Checking Claude CLI..." });
+    const result = await checkClaudeProvider({
+      command: this.plugin.settings.claudePath || "claude",
+      timeoutMs: 15e3
+    });
+    this.doctorEl.empty();
+    this.doctorEl.toggleClass("marktl-doctor-ok", result.ok);
+    this.doctorEl.toggleClass("marktl-doctor-error", !result.ok);
+    this.doctorEl.createEl("strong", {
+      text: result.ok ? "Claude is ready" : "Claude needs attention"
+    });
+    this.doctorEl.createEl("p", { text: result.message });
+    if (result.version) {
+      this.doctorEl.createEl("code", { text: result.version });
+    }
   }
 };
 
@@ -1163,6 +1515,7 @@ var { buildAssetFileName, extractMarkdownImageReferences, rewriteHtmlImageSource
 var { slugify } = require_html();
 var DEFAULT_SETTINGS = {
   exportFolder: "html-exports",
+  setupCompleted: false,
   artifactType: "faithful-note",
   template: "minimal",
   aiProvider: "none",
@@ -1175,7 +1528,7 @@ var DEFAULT_SETTINGS = {
   geminiPath: "",
   copyShareLinkAfterExport: false
 };
-var MarktlPlugin = class extends import_obsidian5.Plugin {
+var MarktlPlugin = class extends import_obsidian7.Plugin {
   constructor() {
     super(...arguments);
     this.settings = DEFAULT_SETTINGS;
@@ -1194,7 +1547,7 @@ var MarktlPlugin = class extends import_obsidian5.Plugin {
       name: "Export active note to HTML...",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
-        const canRun = file instanceof import_obsidian5.TFile && file.extension === "md";
+        const canRun = file instanceof import_obsidian7.TFile && file.extension === "md";
         if (canRun && !checking) {
           this.openExportModal();
         }
@@ -1206,14 +1559,31 @@ var MarktlPlugin = class extends import_obsidian5.Plugin {
       name: "Quick export active note to HTML",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
-        const canRun = file instanceof import_obsidian5.TFile && file.extension === "md";
+        const canRun = file instanceof import_obsidian7.TFile && file.extension === "md";
         if (canRun && !checking) {
           void this.exportActiveNote();
         }
         return canRun;
       }
     });
+    this.addCommand({
+      id: "open-marktl-setup",
+      name: "Open MarkTL setup wizard",
+      callback: () => {
+        this.openSetupWizard();
+      }
+    });
+    this.addCommand({
+      id: "check-claude-cli",
+      name: "Check Claude Code CLI setup",
+      callback: () => {
+        this.openSetupWizard();
+      }
+    });
     this.addSettingTab(new MarktlSettingTab(this.app, this));
+    if (!this.settings.setupCompleted) {
+      window.setTimeout(() => this.openSetupWizard(), 800);
+    }
   }
   onunload() {
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_MARKTL_PREVIEW);
@@ -1236,10 +1606,13 @@ var MarktlPlugin = class extends import_obsidian5.Plugin {
   async saveSettings() {
     await this.saveData(this.settings);
   }
+  openSetupWizard() {
+    new MarktlSetupModal(this.app, this).open();
+  }
   openExportModal() {
     const file = this.app.workspace.getActiveFile();
-    if (!(file instanceof import_obsidian5.TFile) || file.extension !== "md") {
-      new import_obsidian5.Notice("Open a Markdown note before exporting HTML.");
+    if (!(file instanceof import_obsidian7.TFile) || file.extension !== "md") {
+      new import_obsidian7.Notice("Open a Markdown note before exporting HTML.");
       return;
     }
     new MarktlExportModal(this.app, this, (options) => {
@@ -1248,8 +1621,8 @@ var MarktlPlugin = class extends import_obsidian5.Plugin {
   }
   async exportActiveNote(overrides = {}) {
     const file = this.app.workspace.getActiveFile();
-    if (!(file instanceof import_obsidian5.TFile) || file.extension !== "md") {
-      new import_obsidian5.Notice("Open a Markdown note before exporting HTML.");
+    if (!(file instanceof import_obsidian7.TFile) || file.extension !== "md") {
+      new import_obsidian7.Notice("Open a Markdown note before exporting HTML.");
       return;
     }
     const options = this.resolveExportOptions(overrides);
@@ -1299,25 +1672,34 @@ var MarktlPlugin = class extends import_obsidian5.Plugin {
         await this.copyShareLink(outputPath);
       }
       progress.complete(`Done: ${outputPath}`);
+      this.openResultSummary({
+        outputPath,
+        usedFallback: result.usedFallback,
+        aiProvider: options.aiProvider,
+        assetCount: assetResult.mappings.length,
+        warnings,
+        shareTarget: options.shareTarget,
+        copiedShareLink: options.copyShareLinkAfterExport
+      });
       if (result.usedFallback && options.aiProvider !== "none") {
-        new import_obsidian5.Notice("AI conversion failed; local fallback HTML was generated.");
+        new import_obsidian7.Notice("AI conversion failed; local fallback HTML was generated.");
       } else {
-        new import_obsidian5.Notice(`HTML exported to ${outputPath}`);
+        new import_obsidian7.Notice(`HTML exported to ${outputPath}`);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       progress.fail(message);
-      new import_obsidian5.Notice(`HTML export failed: ${message}`);
+      new import_obsidian7.Notice(`HTML export failed: ${message}`);
     }
   }
   async prepareOutputPlan(source, options) {
-    const folder = (0, import_obsidian5.normalizePath)(this.settings.exportFolder || DEFAULT_SETTINGS.exportFolder);
+    const folder = (0, import_obsidian7.normalizePath)(this.settings.exportFolder || DEFAULT_SETTINGS.exportFolder);
     if (!await this.app.vault.adapter.exists(folder)) {
       await this.app.vault.createFolder(folder);
     }
     const basename = slugify(source.basename);
-    const outputPath = options.shareTarget === "static-bundle" ? (0, import_obsidian5.normalizePath)(`${folder}/share/${basename}/index.html`) : (0, import_obsidian5.normalizePath)(`${folder}/${basename}.html`);
-    const assetFolder = options.shareTarget === "static-bundle" ? (0, import_obsidian5.normalizePath)(`${folder}/share/${basename}/assets`) : (0, import_obsidian5.normalizePath)(`${folder}/${basename}-assets`);
+    const outputPath = options.shareTarget === "static-bundle" ? (0, import_obsidian7.normalizePath)(`${folder}/share/${basename}/index.html`) : (0, import_obsidian7.normalizePath)(`${folder}/${basename}.html`);
+    const assetFolder = options.shareTarget === "static-bundle" ? (0, import_obsidian7.normalizePath)(`${folder}/share/${basename}/assets`) : (0, import_obsidian7.normalizePath)(`${folder}/${basename}-assets`);
     const assetRelativePrefix = options.shareTarget === "static-bundle" ? "assets" : `${basename}-assets`;
     return { folder, basename, outputPath, assetFolder, assetRelativePrefix };
   }
@@ -1342,7 +1724,7 @@ var MarktlPlugin = class extends import_obsidian5.Plugin {
         continue;
       }
       const assetFileName = buildAssetFileName(imageFile.path, mappings.length + 1, usedNames);
-      const destinationPath = (0, import_obsidian5.normalizePath)(`${plan.assetFolder}/${assetFileName}`);
+      const destinationPath = (0, import_obsidian7.normalizePath)(`${plan.assetFolder}/${assetFileName}`);
       const relativeSrc = encodeURI(`${plan.assetRelativePrefix}/${assetFileName}`);
       mappings.push({
         original: target,
@@ -1354,7 +1736,7 @@ var MarktlPlugin = class extends import_obsidian5.Plugin {
           String(reference.raw || ""),
           imageFile.path,
           imageFile.name,
-          (0, import_obsidian5.normalizePath)(target)
+          (0, import_obsidian7.normalizePath)(target)
         ]
       });
     }
@@ -1363,22 +1745,22 @@ var MarktlPlugin = class extends import_obsidian5.Plugin {
   resolveImageFile(target, source) {
     var _a;
     const linked = this.app.metadataCache.getFirstLinkpathDest(target, source.path);
-    if (linked instanceof import_obsidian5.TFile) {
+    if (linked instanceof import_obsidian7.TFile) {
       return linked;
     }
-    const normalized = (0, import_obsidian5.normalizePath)(target);
+    const normalized = (0, import_obsidian7.normalizePath)(target);
     const direct = this.app.vault.getAbstractFileByPath(normalized);
-    if (direct instanceof import_obsidian5.TFile) {
+    if (direct instanceof import_obsidian7.TFile) {
       return direct;
     }
     if ((_a = source.parent) == null ? void 0 : _a.path) {
-      const relative = this.app.vault.getAbstractFileByPath((0, import_obsidian5.normalizePath)(`${source.parent.path}/${target}`));
-      if (relative instanceof import_obsidian5.TFile) {
+      const relative = this.app.vault.getAbstractFileByPath((0, import_obsidian7.normalizePath)(`${source.parent.path}/${target}`));
+      if (relative instanceof import_obsidian7.TFile) {
         return relative;
       }
     }
     const byName = this.app.vault.getFiles().find((file) => file.name === target || file.path.endsWith(`/${target}`));
-    return byName instanceof import_obsidian5.TFile ? byName : null;
+    return byName instanceof import_obsidian7.TFile ? byName : null;
   }
   async copyImageAssets(mappings) {
     const copied = /* @__PURE__ */ new Set();
@@ -1417,7 +1799,7 @@ var MarktlPlugin = class extends import_obsidian5.Plugin {
     }
   }
   async writeShareReadme(folder, basename, sourcePath, options) {
-    const readmePath = (0, import_obsidian5.normalizePath)(`${folder}/share/${basename}/README.md`);
+    const readmePath = (0, import_obsidian7.normalizePath)(`${folder}/share/${basename}/README.md`);
     const content = [
       `# ${basename}`,
       "",
@@ -1434,12 +1816,16 @@ var MarktlPlugin = class extends import_obsidian5.Plugin {
     ].join("\n");
     await this.app.vault.adapter.write(readmePath, content);
   }
+  openResultSummary(summary) {
+    new MarktlResultModal(this.app, summary, (outputPath) => this.copyShareLink(outputPath)).open();
+  }
   async copyShareLink(outputPath) {
     const adapter = this.app.vault.adapter;
     const fullPath = adapter.getFullPath ? adapter.getFullPath(outputPath) : outputPath;
     const link = fullPath.startsWith("/") ? `file://${encodeURI(fullPath)}` : outputPath;
     await navigator.clipboard.writeText(link);
-    new import_obsidian5.Notice("HTML share link copied.");
+    new import_obsidian7.Notice("HTML share link copied.");
+    return link;
   }
   async openPreview(state) {
     let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_MARKTL_PREVIEW)[0];

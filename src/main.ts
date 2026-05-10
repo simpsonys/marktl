@@ -2,8 +2,10 @@ import { Notice, Plugin, TFile, WorkspaceLeaf, normalizePath } from 'obsidian';
 import { MarktlExportModal } from './export-modal';
 import { MarktlProgressModal } from './progress-modal';
 import { MarktlPreviewView, VIEW_TYPE_MARKTL_PREVIEW } from './preview-view';
+import { MarktlResultModal } from './result-modal';
 import { MarktlSettingTab } from './settings-tab';
-import type { ExportOptions, MarktlSettings, PreviewState } from './types';
+import { MarktlSetupModal } from './setup-modal';
+import type { ExportOptions, ExportSummary, MarktlSettings, PreviewState } from './types';
 
 const { convertWithAiFallback } = require('./core/ai.js');
 const { buildAssetFileName, extractMarkdownImageReferences, rewriteHtmlImageSources } = require('./core/assets.js');
@@ -11,6 +13,7 @@ const { slugify } = require('./core/html.js');
 
 const DEFAULT_SETTINGS: MarktlSettings = {
   exportFolder: 'html-exports',
+  setupCompleted: false,
   artifactType: 'faithful-note',
   template: 'minimal',
   aiProvider: 'none',
@@ -81,7 +84,27 @@ export default class MarktlPlugin extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: 'open-marktl-setup',
+      name: 'Open MarkTL setup wizard',
+      callback: () => {
+        this.openSetupWizard();
+      },
+    });
+
+    this.addCommand({
+      id: 'check-claude-cli',
+      name: 'Check Claude Code CLI setup',
+      callback: () => {
+        this.openSetupWizard();
+      },
+    });
+
     this.addSettingTab(new MarktlSettingTab(this.app, this));
+
+    if (!this.settings.setupCompleted) {
+      window.setTimeout(() => this.openSetupWizard(), 800);
+    }
   }
 
   onunload(): void {
@@ -106,6 +129,10 @@ export default class MarktlPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+  }
+
+  openSetupWizard(): void {
+    new MarktlSetupModal(this.app, this).open();
   }
 
   openExportModal(): void {
@@ -180,6 +207,15 @@ export default class MarktlPlugin extends Plugin {
       }
 
       progress.complete(`Done: ${outputPath}`);
+      this.openResultSummary({
+        outputPath,
+        usedFallback: result.usedFallback,
+        aiProvider: options.aiProvider,
+        assetCount: assetResult.mappings.length,
+        warnings,
+        shareTarget: options.shareTarget,
+        copiedShareLink: options.copyShareLinkAfterExport,
+      });
       if (result.usedFallback && options.aiProvider !== 'none') {
         new Notice('AI conversion failed; local fallback HTML was generated.');
       } else {
@@ -337,7 +373,11 @@ export default class MarktlPlugin extends Plugin {
     await this.app.vault.adapter.write(readmePath, content);
   }
 
-  private async copyShareLink(outputPath: string): Promise<void> {
+  private openResultSummary(summary: ExportSummary): void {
+    new MarktlResultModal(this.app, summary, (outputPath) => this.copyShareLink(outputPath)).open();
+  }
+
+  async copyShareLink(outputPath: string): Promise<string> {
     const adapter = this.app.vault.adapter as typeof this.app.vault.adapter & {
       getFullPath?: (path: string) => string;
     };
@@ -348,6 +388,7 @@ export default class MarktlPlugin extends Plugin {
 
     await navigator.clipboard.writeText(link);
     new Notice('HTML share link copied.');
+    return link;
   }
 
   private async openPreview(state: PreviewState): Promise<void> {

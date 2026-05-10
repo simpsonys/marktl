@@ -7,6 +7,7 @@ export type ShareTarget = 'local-link' | 'static-bundle';
 
 export interface MarktlSettings {
   exportFolder: string;
+  setupCompleted: boolean;
   artifactType: ArtifactType;
   template: string;
   aiProvider: AiProvider;
@@ -29,6 +30,16 @@ export interface ExportOptions {
   previewSecurity: PreviewSecurity;
   shareTarget: ShareTarget;
   copyShareLinkAfterExport: boolean;
+}
+
+export interface ExportSummary {
+  outputPath: string;
+  usedFallback: boolean;
+  aiProvider: AiProvider;
+  assetCount: number;
+  warnings: string[];
+  shareTarget: ShareTarget;
+  copiedShareLink: boolean;
 }
 
 export interface PreviewState {
