@@ -67,7 +67,6 @@ export class MarktlExportModal extends Modal {
       .addDropdown((dropdown) => dropdown
         .addOption('none', 'None / local fallback')
         .addOption('claude', 'Claude Code CLI')
-        .addOption('gemini', 'Gemini CLI')
         .setValue(this.options.aiProvider)
         .onChange((value) => {
           this.options.aiProvider = value as AiProvider;

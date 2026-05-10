@@ -496,8 +496,7 @@ var require_ai = __commonJS({
     var { convertMarkdownToHtml } = require_converter();
     var { looksLikeHtmlDocument, sanitizeHtml } = require_sanitizer();
     var providerCommands = {
-      claude: { command: "claude", args: ["-p"], promptAsArgument: true },
-      gemini: { command: "gemini", args: ["-p"], promptAsArgument: true }
+      claude: { command: "claude", args: ["-p"], promptAsArgument: true }
     };
     var cliPath = [
       "/opt/homebrew/bin",
@@ -543,7 +542,7 @@ var require_ai = __commonJS({
         throw new Error(`Unsupported AI provider: ${options.provider}`);
       }
       const prompt = buildPrompt(markdown, options);
-      const timeout = Number(options.timeoutMs || 6e4);
+      const timeout = Number(options.timeoutMs || 3e5);
       const command = options.cliPaths && options.cliPaths[options.provider] ? options.cliPaths[options.provider] : provider.command;
       const args = provider.promptAsArgument ? [...provider.args, prompt] : provider.args;
       const execOptions = {
@@ -568,6 +567,7 @@ var require_ai = __commonJS({
         const details = [
           cleanProviderError(error.stderr),
           parseProviderErrorOutput(error.stdout, provider),
+          cleanProviderError(error.stdout),
           cleanProviderError(error.message)
         ].filter(Boolean).join("\n");
         throw new Error(details || String(error));
@@ -834,7 +834,7 @@ var MarktlExportModal = class extends import_obsidian.Modal {
         this.options.template = value;
       });
     });
-    new import_obsidian.Setting(contentEl).setName("AI CLI").setDesc("Only providers that passed live plugin-style execution are shown.").addDropdown((dropdown) => dropdown.addOption("none", "None / local fallback").addOption("claude", "Claude Code CLI").addOption("gemini", "Gemini CLI").setValue(this.options.aiProvider).onChange((value) => {
+    new import_obsidian.Setting(contentEl).setName("AI CLI").setDesc("Only providers that passed live plugin-style execution are shown.").addDropdown((dropdown) => dropdown.addOption("none", "None / local fallback").addOption("claude", "Claude Code CLI").setValue(this.options.aiProvider).onChange((value) => {
       this.options.aiProvider = value;
     }));
     new import_obsidian.Setting(contentEl).setName("Mode").setDesc("Preserve keeps content faithful; other modes allow AI restructuring.").addDropdown((dropdown) => dropdown.addOption("preserve", "Preserve content").addOption("presentation", "Presentation").addOption("blog", "Blog article").addOption("landing", "Landing page").setValue(this.options.conversionMode).onChange((value) => {
@@ -993,7 +993,7 @@ var MarktlSettingTab = class extends import_obsidian4.PluginSettingTab {
         await this.plugin.saveSettings();
       });
     });
-    new import_obsidian4.Setting(containerEl).setName("AI provider").setDesc("Optional CLI provider for high-quality AI conversion.").addDropdown((dropdown) => dropdown.addOption("none", "None / local fallback").addOption("claude", "Claude Code CLI").addOption("gemini", "Gemini CLI").setValue(this.plugin.settings.aiProvider).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("AI provider").setDesc("Optional CLI provider for high-quality AI conversion.").addDropdown((dropdown) => dropdown.addOption("none", "None / local fallback").addOption("claude", "Claude Code CLI").setValue(this.plugin.settings.aiProvider).onChange(async (value) => {
       this.plugin.settings.aiProvider = value;
       await this.plugin.saveSettings();
     }));
@@ -1009,13 +1009,12 @@ var MarktlSettingTab = class extends import_obsidian4.PluginSettingTab {
       this.plugin.settings.failurePolicy = value;
       await this.plugin.saveSettings();
     }));
-    new import_obsidian4.Setting(containerEl).setName("CLI timeout").setDesc("Maximum AI CLI runtime in milliseconds.").addText((text) => text.setPlaceholder("60000").setValue(String(this.plugin.settings.timeoutMs)).onChange(async (value) => {
+    new import_obsidian4.Setting(containerEl).setName("CLI timeout").setDesc("Maximum AI CLI runtime in milliseconds. Rich HTML artifacts can take 2-5 minutes.").addText((text) => text.setPlaceholder("300000").setValue(String(this.plugin.settings.timeoutMs)).onChange(async (value) => {
       const parsed = Number(value);
-      this.plugin.settings.timeoutMs = Number.isFinite(parsed) && parsed > 0 ? parsed : 6e4;
+      this.plugin.settings.timeoutMs = Number.isFinite(parsed) && parsed > 0 ? parsed : 3e5;
       await this.plugin.saveSettings();
     }));
     this.addCliPathSetting(containerEl, "Claude Code CLI path", "claudePath", "claude");
-    this.addCliPathSetting(containerEl, "Gemini CLI path", "geminiPath", "gemini");
     new import_obsidian4.Setting(containerEl).setName("Share target").setDesc("Local link copies the export file. Static bundle writes share/<slug>/index.html for hosting.").addDropdown((dropdown) => dropdown.addOption("local-link", "Local file link").addOption("static-bundle", "Static hosting bundle").setValue(this.plugin.settings.shareTarget).onChange(async (value) => {
       this.plugin.settings.shareTarget = value;
       await this.plugin.saveSettings();
@@ -1045,7 +1044,7 @@ var DEFAULT_SETTINGS = {
   failurePolicy: "fallback",
   previewSecurity: "sanitized",
   shareTarget: "local-link",
-  timeoutMs: 6e4,
+  timeoutMs: 3e5,
   claudePath: "",
   geminiPath: "",
   copyShareLinkAfterExport: false
@@ -1095,8 +1094,17 @@ var MarktlPlugin = class extends import_obsidian5.Plugin {
   }
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-    if (this.settings.aiProvider === "codex") {
+    let shouldSave = false;
+    if (["codex", "gemini"].includes(this.settings.aiProvider)) {
       this.settings.aiProvider = "none";
+      shouldSave = true;
+    }
+    if (!Number.isFinite(this.settings.timeoutMs) || this.settings.timeoutMs <= 6e4) {
+      this.settings.timeoutMs = DEFAULT_SETTINGS.timeoutMs;
+      shouldSave = true;
+    }
+    if (shouldSave) {
+      await this.saveSettings();
     }
   }
   async saveSettings() {
@@ -1125,6 +1133,7 @@ var MarktlPlugin = class extends import_obsidian5.Plugin {
     progress.addStep(`Template: ${options.template}`);
     progress.addStep(`AI CLI: ${options.aiProvider === "none" ? "local fallback" : options.aiProvider}`);
     progress.addStep(`Mode: ${options.conversionMode}; preview: ${options.previewSecurity}`);
+    progress.addStep(`Timeout: ${Math.round(this.settings.timeoutMs / 1e3)}s`);
     try {
       progress.addStep("Reading active Markdown note...");
       const markdown = await this.app.vault.read(file);
@@ -1139,8 +1148,7 @@ var MarktlPlugin = class extends import_obsidian5.Plugin {
         timeoutMs: this.settings.timeoutMs,
         sourcePath: file.path,
         cliPaths: {
-          claude: this.settings.claudePath,
-          gemini: this.settings.geminiPath
+          claude: this.settings.claudePath
         }
       });
       progress.addStep(result.usedFallback ? "Generated local fallback HTML." : "Generated AI HTML.");

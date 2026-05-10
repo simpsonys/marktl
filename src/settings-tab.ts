@@ -65,7 +65,6 @@ export class MarktlSettingTab extends PluginSettingTab {
       .addDropdown((dropdown) => dropdown
         .addOption('none', 'None / local fallback')
         .addOption('claude', 'Claude Code CLI')
-        .addOption('gemini', 'Gemini CLI')
         .setValue(this.plugin.settings.aiProvider)
         .onChange(async (value) => {
           this.plugin.settings.aiProvider = value as AiProvider;
@@ -112,18 +111,17 @@ export class MarktlSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('CLI timeout')
-      .setDesc('Maximum AI CLI runtime in milliseconds.')
+      .setDesc('Maximum AI CLI runtime in milliseconds. Rich HTML artifacts can take 2-5 minutes.')
       .addText((text) => text
-        .setPlaceholder('60000')
+        .setPlaceholder('300000')
         .setValue(String(this.plugin.settings.timeoutMs))
         .onChange(async (value) => {
           const parsed = Number(value);
-          this.plugin.settings.timeoutMs = Number.isFinite(parsed) && parsed > 0 ? parsed : 60000;
+          this.plugin.settings.timeoutMs = Number.isFinite(parsed) && parsed > 0 ? parsed : 300000;
           await this.plugin.saveSettings();
         }));
 
     this.addCliPathSetting(containerEl, 'Claude Code CLI path', 'claudePath', 'claude');
-    this.addCliPathSetting(containerEl, 'Gemini CLI path', 'geminiPath', 'gemini');
 
     new Setting(containerEl)
       .setName('Share target')
@@ -148,7 +146,7 @@ export class MarktlSettingTab extends PluginSettingTab {
         }));
   }
 
-  private addCliPathSetting(containerEl: HTMLElement, name: string, key: 'claudePath' | 'geminiPath', placeholder: string): void {
+  private addCliPathSetting(containerEl: HTMLElement, name: string, key: 'claudePath', placeholder: string): void {
     new Setting(containerEl)
       .setName(name)
       .setDesc('Leave blank to use the command from PATH.')

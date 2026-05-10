@@ -1,4 +1,4 @@
-export type AiProvider = 'none' | 'claude' | 'gemini';
+export type AiProvider = 'none' | 'claude';
 export type ArtifactType = 'faithful-note' | 'strategy-brief' | 'research-report' | 'decision-memo' | 'interactive-explainer' | 'slide-deck';
 export type ConversionMode = 'preserve' | 'presentation' | 'blog' | 'landing';
 export type FailurePolicy = 'fallback' | 'strict';

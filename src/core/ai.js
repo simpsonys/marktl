@@ -7,7 +7,6 @@ const { looksLikeHtmlDocument, sanitizeHtml } = require('./sanitizer.js');
 
 const providerCommands = {
   claude: { command: 'claude', args: ['-p'], promptAsArgument: true },
-  gemini: { command: 'gemini', args: ['-p'], promptAsArgument: true },
 };
 
 const cliPath = [
@@ -60,7 +59,7 @@ async function runCliProvider(markdown, options = {}) {
   }
 
   const prompt = buildPrompt(markdown, options);
-  const timeout = Number(options.timeoutMs || 60_000);
+  const timeout = Number(options.timeoutMs || 300_000);
   const command = options.cliPaths && options.cliPaths[options.provider]
     ? options.cliPaths[options.provider]
     : provider.command;
@@ -89,6 +88,7 @@ async function runCliProvider(markdown, options = {}) {
     const details = [
       cleanProviderError(error.stderr),
       parseProviderErrorOutput(error.stdout, provider),
+      cleanProviderError(error.stdout),
       cleanProviderError(error.message),
     ]
       .filter(Boolean)

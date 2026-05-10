@@ -33,9 +33,8 @@ MarkTL is not just a "pretty Markdown exporter." The goal is to help you create 
 - Opens the generated HTML in an internal Obsidian preview pane.
 - Shows a progress modal so you can see whether AI or local fallback produced the result.
 - Works without AI through local Markdown-to-HTML conversion.
-- Supports AI conversion through verified providers:
+- Supports AI conversion through the verified provider:
   - Claude Code CLI
-  - Gemini CLI
 - Creates static hosting bundles for GitHub Pages, S3/R2, Netlify, Vercel, or any static host.
 
 ### Artifact Types
@@ -96,9 +95,11 @@ https://github.com/reallygood83/marktl
 Currently verified:
 
 - Claude Code CLI
-- Gemini CLI
 
 Codex CLI is intentionally not shown in the UI for now because plugin-style child-process probes were not stable enough.
+Gemini CLI is also hidden for now because the local plugin-style probe did not complete reliably.
+
+Rich AI artifacts can take several minutes. MarkTL defaults the CLI timeout to 5 minutes and migrates older 60-second settings upward because Claude Code can exceed 60 seconds on long Korean notes.
 
 ### Preview Security
 
@@ -162,7 +163,6 @@ MarkTL은 단순한 "예쁜 Markdown 변환기"가 아닙니다. 목표는 다�
 - AI 없이도 local Markdown-to-HTML 변환으로 동작합니다.
 - 검증된 AI provider를 지원합니다.
   - Claude Code CLI
-  - Gemini CLI
 - GitHub Pages, S3/R2, Netlify, Vercel 같은 정적 호스팅에 올릴 수 있는 bundle을 만들 수 있습니다.
 
 ### Artifact Type
@@ -223,9 +223,11 @@ https://github.com/reallygood83/marktl
 현재 검증된 provider:
 
 - Claude Code CLI
-- Gemini CLI
 
 Codex CLI는 현재 플러그인 child-process 실행 안정성이 충분하지 않아 UI에서 제외했습니다.
+Gemini CLI도 현재 로컬 plugin-style probe가 안정적으로 완료되지 않아 UI에서 제외했습니다.
+
+풍부한 AI artifact는 몇 분이 걸릴 수 있습니다. MarkTL은 CLI timeout 기본값을 5분으로 두며, 기존 60초 설정은 자동으로 5분으로 올립니다. 긴 한국어 노트에서 Claude Code가 60초를 넘는 경우가 있었기 때문입니다.
 
 ### Preview 보안
 

@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { buildPrompt, cleanProviderError, convertWithAiFallback, discoverUserCliPaths, extractHtmlFromAiOutput, getArtifactInstruction, mergePath } = require('../src/core/ai.js');
+const { buildPrompt, cleanProviderError, convertWithAiFallback, discoverUserCliPaths, extractHtmlFromAiOutput, getArtifactInstruction, mergePath, runCliProvider } = require('../src/core/ai.js');
 
 test('local conversion renders frontmatter, callouts, embeds, and Markdown content', () => {
   const markdown = `---
@@ -178,6 +178,30 @@ test('provider timeout errors are concise', async () => {
     }),
     /timed out|Provider exited|Cannot find module/,
   );
+});
+
+test('provider stdout failures are surfaced without leaking the prompt', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'marktl-provider-'));
+  const fakeCli = path.join(tempDir, 'fake-claude.js');
+  fs.writeFileSync(fakeCli, '#!/usr/bin/env node\nprocess.stdout.write("Not logged in · Please run /login\\n"); process.exit(1);\n');
+  fs.chmodSync(fakeCli, 0o755);
+
+  try {
+    await assert.rejects(
+      () => runCliProvider('# Secret prompt should not leak', {
+        provider: 'claude',
+        cliPaths: { claude: fakeCli },
+        timeoutMs: 300000,
+      }),
+      (error) => {
+        assert.match(error.message, /Not logged in/);
+        assert.equal(error.message.includes('Secret prompt should not leak'), false);
+        return true;
+      },
+    );
+  } finally {
+    fs.rmSync(tempDir, { force: true, recursive: true });
+  }
 });
 
 test('CLI path discovery includes nvm and volta bins for Obsidian app launches', () => {

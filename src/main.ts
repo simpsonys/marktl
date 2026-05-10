@@ -17,7 +17,7 @@ const DEFAULT_SETTINGS: MarktlSettings = {
   failurePolicy: 'fallback',
   previewSecurity: 'sanitized',
   shareTarget: 'local-link',
-  timeoutMs: 60000,
+  timeoutMs: 300000,
   claudePath: '',
   geminiPath: '',
   copyShareLinkAfterExport: false,
@@ -73,8 +73,17 @@ export default class MarktlPlugin extends Plugin {
 
   async loadSettings(): Promise<void> {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-    if ((this.settings.aiProvider as string) === 'codex') {
+    let shouldSave = false;
+    if (['codex', 'gemini'].includes(this.settings.aiProvider as string)) {
       this.settings.aiProvider = 'none';
+      shouldSave = true;
+    }
+    if (!Number.isFinite(this.settings.timeoutMs) || this.settings.timeoutMs <= 60000) {
+      this.settings.timeoutMs = DEFAULT_SETTINGS.timeoutMs;
+      shouldSave = true;
+    }
+    if (shouldSave) {
+      await this.saveSettings();
     }
   }
 
@@ -108,6 +117,7 @@ export default class MarktlPlugin extends Plugin {
     progress.addStep(`Template: ${options.template}`);
     progress.addStep(`AI CLI: ${options.aiProvider === 'none' ? 'local fallback' : options.aiProvider}`);
     progress.addStep(`Mode: ${options.conversionMode}; preview: ${options.previewSecurity}`);
+    progress.addStep(`Timeout: ${Math.round(this.settings.timeoutMs / 1000)}s`);
 
     try {
       progress.addStep('Reading active Markdown note...');
@@ -124,7 +134,6 @@ export default class MarktlPlugin extends Plugin {
         sourcePath: file.path,
         cliPaths: {
           claude: this.settings.claudePath,
-          gemini: this.settings.geminiPath,
         },
       });
       progress.addStep(result.usedFallback ? 'Generated local fallback HTML.' : 'Generated AI HTML.');
