@@ -1,4 +1,5 @@
 const path = require('node:path');
+const { normalizeImageTarget } = require('./assets.js');
 const { escapeHtml } = require('./html.js');
 const { sanitizeHtml } = require('./sanitizer.js');
 const { wrapWithTemplate } = require('./templates.js');
@@ -189,8 +190,14 @@ function readList(lines, start) {
 
 function inlineMarkdown(value) {
   return escapeHtml(value)
-    .replace(/!\[\[([^\]]+)]]/g, (_match, target) => `<img src="${escapeHtml(target)}" alt="${escapeHtml(target)}">`)
-    .replace(/!\[([^\]]*)]\(([^)]+)\)/g, (_match, alt, src) => `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}">`)
+    .replace(/!\[\[([^\]]+)]]/g, (_match, target) => {
+      const src = normalizeImageTarget(target);
+      return `<img src="${escapeHtml(src)}" alt="${escapeHtml(path.basename(src))}">`;
+    })
+    .replace(/!\[([^\]]*)]\(([^)]+)\)/g, (_match, alt, src) => {
+      const normalizedSrc = normalizeImageTarget(src);
+      return `<img src="${escapeHtml(normalizedSrc)}" alt="${escapeHtml(alt)}">`;
+    })
     .replace(/\[([^\]]+)]\(([^)]+)\)/g, (_match, label, href) => `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`)
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/\*([^*]+)\*/g, '<em>$1</em>')

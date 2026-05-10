@@ -290,6 +290,122 @@ ${script}
   }
 });
 
+// src/core/assets.js
+var require_assets = __commonJS({
+  "src/core/assets.js"(exports2, module2) {
+    "use strict";
+    var path = require("node:path");
+    var { slugify: slugify2 } = require_html();
+    var IMAGE_EXTENSIONS = /* @__PURE__ */ new Set([".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".avif", ".bmp"]);
+    function extractMarkdownImageReferences2(markdown) {
+      const references = [];
+      const seen = /* @__PURE__ */ new Set();
+      const text = String(markdown || "");
+      for (const match of text.matchAll(/!\[\[([^\]]+)]]/g)) {
+        const raw = String(match[1] || "").trim();
+        const target = normalizeImageTarget(raw);
+        addReference(references, seen, target, raw);
+      }
+      for (const match of text.matchAll(/!\[([^\]]*)]\(([^)]+)\)/g)) {
+        const raw = String(match[2] || "").trim();
+        const target = normalizeImageTarget(raw);
+        addReference(references, seen, target, raw);
+      }
+      return references;
+    }
+    function normalizeImageTarget(value) {
+      let target = String(value || "").trim();
+      if (target.startsWith("<") && target.endsWith(">")) {
+        target = target.slice(1, -1).trim();
+      }
+      target = target.split("|")[0].trim();
+      target = target.split("#")[0].trim();
+      return decodeUriSafely(target);
+    }
+    function isLocalImageTarget(target) {
+      const value = String(target || "").trim();
+      if (!value || /^(?:https?:|data:|blob:|mailto:|#)/i.test(value)) {
+        return false;
+      }
+      return IMAGE_EXTENSIONS.has(path.extname(value).toLowerCase());
+    }
+    function buildAssetFileName2(originalPath, index, used = /* @__PURE__ */ new Set()) {
+      const extension = path.extname(originalPath).toLowerCase();
+      const base = slugify2(path.basename(originalPath, path.extname(originalPath))) || `image-${index}`;
+      let candidate = `${base}${extension}`;
+      let suffix = 2;
+      while (used.has(candidate)) {
+        candidate = `${base}-${suffix}${extension}`;
+        suffix += 1;
+      }
+      used.add(candidate);
+      return candidate;
+    }
+    function rewriteHtmlImageSources2(html, mappings) {
+      const replacements = buildReplacementMap(mappings);
+      if (replacements.size === 0) {
+        return String(html || "");
+      }
+      return String(html || "").replace(/(<img\b[^>]*\bsrc\s*=\s*)(["'])(.*?)\2/gi, (match, prefix, quote, src) => {
+        const normalized = normalizeImageTarget(src);
+        const replacement = replacements.get(src) || replacements.get(normalized) || replacements.get(decodeUriSafely(src));
+        if (!replacement) {
+          return match;
+        }
+        return `${prefix}${quote}${replacement}${quote}`;
+      });
+    }
+    function buildAiAssetInstruction(mappings) {
+      if (!Array.isArray(mappings) || mappings.length === 0) {
+        return "";
+      }
+      const lines = mappings.map((mapping) => `- ${mapping.original}: ${mapping.relativeSrc}`).join("\n");
+      return `
+Local image assets are available. Preserve these images and use the mapped src values exactly:
+${lines}`;
+    }
+    function buildReplacementMap(mappings) {
+      const replacements = /* @__PURE__ */ new Map();
+      for (const mapping of mappings || []) {
+        if (!mapping || !mapping.relativeSrc) {
+          continue;
+        }
+        for (const key of mapping.aliases || []) {
+          if (key) {
+            replacements.set(key, mapping.relativeSrc);
+            replacements.set(`./${key}`, mapping.relativeSrc);
+            replacements.set(encodeURI(key), mapping.relativeSrc);
+            replacements.set(`./${encodeURI(key)}`, mapping.relativeSrc);
+          }
+        }
+      }
+      return replacements;
+    }
+    function addReference(references, seen, target, raw) {
+      if (!isLocalImageTarget(target) || seen.has(target)) {
+        return;
+      }
+      seen.add(target);
+      references.push({ target, raw });
+    }
+    function decodeUriSafely(value) {
+      try {
+        return decodeURI(String(value || ""));
+      } catch (e) {
+        return String(value || "");
+      }
+    }
+    module2.exports = {
+      buildAiAssetInstruction,
+      buildAssetFileName: buildAssetFileName2,
+      extractMarkdownImageReferences: extractMarkdownImageReferences2,
+      isLocalImageTarget,
+      normalizeImageTarget,
+      rewriteHtmlImageSources: rewriteHtmlImageSources2
+    };
+  }
+});
+
 // src/core/sanitizer.js
 var require_sanitizer = __commonJS({
   "src/core/sanitizer.js"(exports2, module2) {
@@ -316,6 +432,7 @@ var require_converter = __commonJS({
   "src/core/converter.js"(exports2, module2) {
     "use strict";
     var path = require("node:path");
+    var { normalizeImageTarget } = require_assets();
     var { escapeHtml } = require_html();
     var { sanitizeHtml } = require_sanitizer();
     var { wrapWithTemplate } = require_templates();
@@ -475,7 +592,13 @@ var require_converter = __commonJS({
       };
     }
     function inlineMarkdown(value) {
-      return escapeHtml(value).replace(/!\[\[([^\]]+)]]/g, (_match, target) => `<img src="${escapeHtml(target)}" alt="${escapeHtml(target)}">`).replace(/!\[([^\]]*)]\(([^)]+)\)/g, (_match, alt, src) => `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}">`).replace(/\[([^\]]+)]\(([^)]+)\)/g, (_match, label, href) => `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/\*([^*]+)\*/g, "<em>$1</em>").replace(/`([^`]+)`/g, "<code>$1</code>");
+      return escapeHtml(value).replace(/!\[\[([^\]]+)]]/g, (_match, target) => {
+        const src = normalizeImageTarget(target);
+        return `<img src="${escapeHtml(src)}" alt="${escapeHtml(path.basename(src))}">`;
+      }).replace(/!\[([^\]]*)]\(([^)]+)\)/g, (_match, alt, src) => {
+        const normalizedSrc = normalizeImageTarget(src);
+        return `<img src="${escapeHtml(normalizedSrc)}" alt="${escapeHtml(alt)}">`;
+      }).replace(/\[([^\]]+)]\(([^)]+)\)/g, (_match, label, href) => `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/\*([^*]+)\*/g, "<em>$1</em>").replace(/`([^`]+)`/g, "<code>$1</code>");
     }
     module2.exports = {
       convertMarkdownToHtml,
@@ -493,6 +616,7 @@ var require_ai = __commonJS({
     var fs = require("node:fs");
     var os = require("node:os");
     var path = require("node:path");
+    var { buildAiAssetInstruction } = require_assets();
     var { convertMarkdownToHtml } = require_converter();
     var { looksLikeHtmlDocument, sanitizeHtml } = require_sanitizer();
     var providerCommands = {
@@ -650,6 +774,7 @@ Instruction: ${modeInstruction}
 Design standard: produce a refined, modern, visually designed HTML page rather than plain Markdown-looking output. Use responsive CSS, strong spacing, tasteful color, cards/sections where helpful, and readable Korean typography if the content is Korean.
 Dynamic policy: ${dynamicInstruction}
 Interaction standard: when trusted mode is enabled, include useful local-only controls such as generated table of contents, section collapse, copy as prompt/markdown/summary buttons, annotations, or lightweight filters when they fit the artifact type. Keep everything self-contained.
+${buildAiAssetInstruction(options.assetMappings)}
 Return only HTML. Do not wrap it in Markdown fences.
 
 ${markdown}`;
@@ -1034,6 +1159,7 @@ var MarktlSettingTab = class extends import_obsidian4.PluginSettingTab {
 
 // src/main.ts
 var { convertWithAiFallback } = require_ai();
+var { buildAssetFileName, extractMarkdownImageReferences, rewriteHtmlImageSources } = require_assets();
 var { slugify } = require_html();
 var DEFAULT_SETTINGS = {
   exportFolder: "html-exports",
@@ -1137,6 +1263,9 @@ var MarktlPlugin = class extends import_obsidian5.Plugin {
     try {
       progress.addStep("Reading active Markdown note...");
       const markdown = await this.app.vault.read(file);
+      const outputPlan = await this.prepareOutputPlan(file, options);
+      const assetResult = await this.resolveImageAssets(markdown, file, outputPlan);
+      progress.addStep(assetResult.mappings.length > 0 ? `Resolved ${assetResult.mappings.length} local image asset(s).` : "No local image assets found.");
       progress.addStep(options.aiProvider === "none" ? "Running local converter..." : `Running ${options.aiProvider} CLI...`);
       const result = await convertWithAiFallback(markdown, {
         provider: options.aiProvider,
@@ -1147,18 +1276,22 @@ var MarktlPlugin = class extends import_obsidian5.Plugin {
         strictAiFailures: options.failurePolicy === "strict",
         timeoutMs: this.settings.timeoutMs,
         sourcePath: file.path,
+        assetMappings: assetResult.mappings,
         cliPaths: {
           claude: this.settings.claudePath
         }
       });
       progress.addStep(result.usedFallback ? "Generated local fallback HTML." : "Generated AI HTML.");
+      const html = rewriteHtmlImageSources(result.html, assetResult.mappings);
+      const warnings = [...result.warnings, ...assetResult.warnings];
       progress.addStep("Writing HTML file to vault...");
-      const outputPath = await this.writeHtmlFile(file, result.html, options);
+      await this.copyImageAssets(assetResult.mappings);
+      const outputPath = await this.writeHtmlFile(outputPlan, html, options, file.path);
       progress.addStep("Opening internal preview pane...");
       await this.openPreview({
-        html: result.html,
+        html,
         filePath: outputPath,
-        warnings: result.warnings,
+        warnings,
         trusted: options.previewSecurity === "trusted"
       });
       if (options.copyShareLinkAfterExport) {
@@ -1177,19 +1310,87 @@ var MarktlPlugin = class extends import_obsidian5.Plugin {
       new import_obsidian5.Notice(`HTML export failed: ${message}`);
     }
   }
-  async writeHtmlFile(source, html, options) {
+  async prepareOutputPlan(source, options) {
     const folder = (0, import_obsidian5.normalizePath)(this.settings.exportFolder || DEFAULT_SETTINGS.exportFolder);
     if (!await this.app.vault.adapter.exists(folder)) {
       await this.app.vault.createFolder(folder);
     }
     const basename = slugify(source.basename);
     const outputPath = options.shareTarget === "static-bundle" ? (0, import_obsidian5.normalizePath)(`${folder}/share/${basename}/index.html`) : (0, import_obsidian5.normalizePath)(`${folder}/${basename}.html`);
-    await this.ensureParentFolder(outputPath);
-    await this.app.vault.adapter.write(outputPath, html);
+    const assetFolder = options.shareTarget === "static-bundle" ? (0, import_obsidian5.normalizePath)(`${folder}/share/${basename}/assets`) : (0, import_obsidian5.normalizePath)(`${folder}/${basename}-assets`);
+    const assetRelativePrefix = options.shareTarget === "static-bundle" ? "assets" : `${basename}-assets`;
+    return { folder, basename, outputPath, assetFolder, assetRelativePrefix };
+  }
+  async writeHtmlFile(plan, html, options, sourcePath) {
+    await this.ensureParentFolder(plan.outputPath);
+    await this.app.vault.adapter.write(plan.outputPath, html);
     if (options.shareTarget === "static-bundle") {
-      await this.writeShareReadme(folder, basename, source.path, options);
+      await this.writeShareReadme(plan.folder, plan.basename, sourcePath, options);
     }
-    return outputPath;
+    return plan.outputPath;
+  }
+  async resolveImageAssets(markdown, source, plan) {
+    const references = extractMarkdownImageReferences(markdown);
+    const warnings = [];
+    const mappings = [];
+    const usedNames = /* @__PURE__ */ new Set();
+    for (const reference of references) {
+      const target = String(reference.target || "");
+      const imageFile = this.resolveImageFile(target, source);
+      if (!imageFile) {
+        warnings.push(`Image asset not found: ${target}`);
+        continue;
+      }
+      const assetFileName = buildAssetFileName(imageFile.path, mappings.length + 1, usedNames);
+      const destinationPath = (0, import_obsidian5.normalizePath)(`${plan.assetFolder}/${assetFileName}`);
+      const relativeSrc = encodeURI(`${plan.assetRelativePrefix}/${assetFileName}`);
+      mappings.push({
+        original: target,
+        sourcePath: imageFile.path,
+        destinationPath,
+        relativeSrc,
+        aliases: [
+          target,
+          String(reference.raw || ""),
+          imageFile.path,
+          imageFile.name,
+          (0, import_obsidian5.normalizePath)(target)
+        ]
+      });
+    }
+    return { mappings, warnings };
+  }
+  resolveImageFile(target, source) {
+    var _a;
+    const linked = this.app.metadataCache.getFirstLinkpathDest(target, source.path);
+    if (linked instanceof import_obsidian5.TFile) {
+      return linked;
+    }
+    const normalized = (0, import_obsidian5.normalizePath)(target);
+    const direct = this.app.vault.getAbstractFileByPath(normalized);
+    if (direct instanceof import_obsidian5.TFile) {
+      return direct;
+    }
+    if ((_a = source.parent) == null ? void 0 : _a.path) {
+      const relative = this.app.vault.getAbstractFileByPath((0, import_obsidian5.normalizePath)(`${source.parent.path}/${target}`));
+      if (relative instanceof import_obsidian5.TFile) {
+        return relative;
+      }
+    }
+    const byName = this.app.vault.getFiles().find((file) => file.name === target || file.path.endsWith(`/${target}`));
+    return byName instanceof import_obsidian5.TFile ? byName : null;
+  }
+  async copyImageAssets(mappings) {
+    const copied = /* @__PURE__ */ new Set();
+    for (const mapping of mappings) {
+      if (copied.has(mapping.destinationPath)) {
+        continue;
+      }
+      copied.add(mapping.destinationPath);
+      await this.ensureParentFolder(mapping.destinationPath);
+      const data = await this.app.vault.adapter.readBinary(mapping.sourcePath);
+      await this.app.vault.adapter.writeBinary(mapping.destinationPath, data);
+    }
   }
   resolveExportOptions(overrides) {
     var _a;

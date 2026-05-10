@@ -124,6 +124,25 @@ You can publish that folder with GitHub Pages, S3/R2, Netlify, Vercel, or any st
 
 MarkTL does not upload vault content automatically. Public sharing should always be explicit.
 
+### Local Images
+
+MarkTL bundles local note images during export. It detects Obsidian embeds and Markdown images such as:
+
+```markdown
+![[diagram.png]]
+![[Attachments/chart.webp|Chart]]
+![Chart](images/chart.png)
+```
+
+Resolved image files are copied next to the generated HTML and image `src` values are rewritten to the bundled asset path:
+
+```text
+html-exports/<note>.html
+html-exports/<note>-assets/<image>.png
+```
+
+For static bundles, images are written under `share/<slug>/assets/`. Remote images and data URLs are left unchanged.
+
 ### Development
 
 ```bash
@@ -251,6 +270,25 @@ html-exports/share/<slug>/README.md
 이 폴더를 GitHub Pages, S3/R2, Netlify, Vercel 등 정적 호스팅에 올릴 수 있습니다.
 
 MarkTL은 vault 내용을 자동 업로드하지 않습니다. 공개 공유는 항상 사용자가 명시적으로 선택해야 합니다.
+
+### 로컬 이미지
+
+MarkTL은 export 과정에서 노트의 로컬 이미지를 함께 bundle로 만듭니다. 아래 문법을 감지합니다.
+
+```markdown
+![[diagram.png]]
+![[Attachments/chart.webp|Chart]]
+![Chart](images/chart.png)
+```
+
+찾은 이미지 파일은 생성된 HTML 옆으로 복사되고, HTML의 이미지 `src`는 bundle 안의 asset 경로로 바뀝니다.
+
+```text
+html-exports/<note>.html
+html-exports/<note>-assets/<image>.png
+```
+
+Static bundle에서는 이미지가 `share/<slug>/assets/` 아래에 저장됩니다. 원격 이미지와 data URL은 그대로 둡니다.
 
 ### 개발
 

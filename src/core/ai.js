@@ -2,6 +2,7 @@ const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { buildAiAssetInstruction } = require('./assets.js');
 const { convertMarkdownToHtml } = require('./converter.js');
 const { looksLikeHtmlDocument, sanitizeHtml } = require('./sanitizer.js');
 
@@ -180,6 +181,7 @@ Instruction: ${modeInstruction}
 Design standard: produce a refined, modern, visually designed HTML page rather than plain Markdown-looking output. Use responsive CSS, strong spacing, tasteful color, cards/sections where helpful, and readable Korean typography if the content is Korean.
 Dynamic policy: ${dynamicInstruction}
 Interaction standard: when trusted mode is enabled, include useful local-only controls such as generated table of contents, section collapse, copy as prompt/markdown/summary buttons, annotations, or lightweight filters when they fit the artifact type. Keep everything self-contained.
+${buildAiAssetInstruction(options.assetMappings)}
 Return only HTML. Do not wrap it in Markdown fences.
 
 ${markdown}`;

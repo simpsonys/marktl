@@ -22,7 +22,7 @@ Intro paragraph with [docs](https://example.com).
 > [!NOTE] Remember
 > Keep the launch small.
 
-![[diagram.png]]
+![[diagram.png|Launch diagram]]
 
 | A | B |
 | - | - |
