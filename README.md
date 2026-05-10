@@ -160,6 +160,15 @@ The public URL becomes:
 <GitHub Pages base URL>/<Publish path>/<slug>/
 ```
 
+MarkTL also maintains a share home page and machine-readable index:
+
+```text
+<GitHub Pages base URL>/<Publish path>/
+<GitHub Pages base URL>/<Publish path>/index.json
+```
+
+Each GitHub Pages publish adds or updates one entry by `<slug>`. Re-exporting the same note updates that entry; publishing a different note adds a new entry.
+
 GitHub tokens are stored in the plugin data file. Use a dedicated repository and a narrow fine-grained token. Public publishing should always be intentional.
 
 ### Local Images
@@ -344,6 +353,15 @@ GitHub Pages publish를 쓰려면 설정에 아래 값을 입력합니다.
 ```text
 <GitHub Pages base URL>/<Publish path>/<slug>/
 ```
+
+MarkTL은 공유 홈 페이지와 기계가 읽을 수 있는 index도 함께 관리합니다.
+
+```text
+<GitHub Pages base URL>/<Publish path>/
+<GitHub Pages base URL>/<Publish path>/index.json
+```
+
+GitHub Pages publish를 할 때마다 `<slug>` 기준으로 항목이 추가되거나 갱신됩니다. 같은 노트를 다시 export하면 해당 항목이 최신본으로 바뀌고, 다른 노트를 publish하면 목록에 새 항목이 추가됩니다.
 
 GitHub token은 플러그인 데이터 파일에 저장됩니다. 전용 repo와 권한이 좁은 fine-grained token을 쓰세요. 공개 publish는 항상 사용자가 명시적으로 선택해야 합니다.
 

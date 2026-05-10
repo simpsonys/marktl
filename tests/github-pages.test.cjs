@@ -4,10 +4,13 @@ const assert = require('node:assert/strict');
 const {
   buildPagesUrl,
   buildPublishPath,
+  buildShareHomeUrl,
   inferPagesBaseUrl,
   mimeTypeForPath,
   normalizePublishPath,
   parseRepo,
+  renderShareIndexHtml,
+  updateShareIndex,
 } = require('../src/core/github-pages.js');
 
 test('parses GitHub repository settings', () => {
@@ -20,6 +23,7 @@ test('builds stable GitHub Pages paths and URLs', () => {
   assert.equal(normalizePublishPath('/exports//marktl/'), 'exports/marktl');
   assert.equal(buildPublishPath('/exports/', 'my-note', 'assets/chart.png'), 'exports/my-note/assets/chart.png');
   assert.equal(buildPagesUrl('https://reallygood83.github.io/marktl-shares/', 'exports', 'my note'), 'https://reallygood83.github.io/marktl-shares/exports/my%20note/');
+  assert.equal(buildShareHomeUrl('https://reallygood83.github.io/marktl-shares/', 'exports'), 'https://reallygood83.github.io/marktl-shares/exports/');
   assert.equal(inferPagesBaseUrl('reallygood83/marktl-shares'), 'https://reallygood83.github.io/marktl-shares');
   assert.equal(inferPagesBaseUrl('reallygood83/reallygood83.github.io'), 'https://reallygood83.github.io');
 });
@@ -28,4 +32,46 @@ test('returns MIME types for publishable files', () => {
   assert.equal(mimeTypeForPath('index.html'), 'text/html; charset=utf-8');
   assert.equal(mimeTypeForPath('assets/chart.webp'), 'image/webp');
   assert.equal(mimeTypeForPath('unknown.bin'), 'application/octet-stream');
+});
+
+test('updates share index by slug and newest first', () => {
+  const first = updateShareIndex(null, {
+    slug: 'alpha',
+    title: 'Alpha',
+    url: 'https://example.com/alpha/',
+    sourcePath: 'A.md',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  });
+  const second = updateShareIndex(first, {
+    slug: 'beta',
+    title: 'Beta',
+    url: 'https://example.com/beta/',
+    sourcePath: 'B.md',
+    updatedAt: '2026-01-02T00:00:00.000Z',
+  });
+  const updated = updateShareIndex(second, {
+    slug: 'alpha',
+    title: 'Alpha 2',
+    url: 'https://example.com/alpha/',
+    sourcePath: 'A2.md',
+    updatedAt: '2026-01-03T00:00:00.000Z',
+  });
+
+  assert.deepEqual(updated.items.map((item) => item.slug), ['alpha', 'beta']);
+  assert.equal(updated.items[0].title, 'Alpha 2');
+  assert.equal(updated.items.length, 2);
+});
+
+test('renders share home page with published links', () => {
+  const html = renderShareIndexHtml({
+    items: [
+      { slug: 'alpha', title: 'Alpha', url: 'https://example.com/alpha/', sourcePath: 'A.md', updatedAt: '2026-01-01' },
+    ],
+  }, {
+    title: 'My Shares',
+  });
+
+  assert.match(html, /My Shares/);
+  assert.match(html, /https:\/\/example\.com\/alpha\//);
+  assert.match(html, /A\.md/);
 });

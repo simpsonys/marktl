@@ -20,6 +20,7 @@ export interface MarktlSettings {
   githubToken: string;
   githubPagesBaseUrl: string;
   githubPublishPath: string;
+  githubShareHomeTitle: string;
   timeoutMs: number;
   claudePath: string;
   geminiPath: string;
@@ -46,6 +47,7 @@ export interface ExportSummary {
   shareTarget: ShareTarget;
   copiedShareLink: boolean;
   publicUrl?: string;
+  shareHomeUrl?: string;
 }
 
 export interface PreviewState {

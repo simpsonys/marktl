@@ -40,6 +40,15 @@ function buildPagesUrl(baseUrl, basePath, slug) {
   return `${root}/${suffix ? `${suffix}/` : ''}`;
 }
 
+function buildShareHomeUrl(baseUrl, basePath) {
+  const root = String(baseUrl || '').trim().replace(/\/+$/g, '');
+  if (!root) {
+    return '';
+  }
+  const suffix = normalizePublishPath(basePath);
+  return `${root}/${suffix ? `${encodePathPart(suffix)}/` : ''}`;
+}
+
 function encodePathPart(value) {
   return String(value || '')
     .split('/')
@@ -76,11 +85,68 @@ function mimeTypeForPath(filePath) {
   }[extension] || 'application/octet-stream';
 }
 
+function updateShareIndex(existingIndex, entry) {
+  const now = entry.updatedAt || new Date().toISOString();
+  const current = Array.isArray(existingIndex?.items) ? existingIndex.items : [];
+  const items = [
+    {
+      ...entry,
+      updatedAt: now,
+    },
+    ...current.filter((item) => item && item.slug !== entry.slug),
+  ].sort((left, right) => String(right.updatedAt || '').localeCompare(String(left.updatedAt || '')));
+
+  return {
+    version: 1,
+    updatedAt: now,
+    items,
+  };
+}
+
+function renderShareIndexHtml(index, options = {}) {
+  const title = options.title || 'MarkTL Shared HTML';
+  const baseUrl = String(options.baseUrl || '').replace(/\/+$/g, '');
+  const items = Array.isArray(index?.items) ? index.items : [];
+  const list = items.map((item) => {
+    const href = item.url || (baseUrl ? `${baseUrl}/${encodeURIComponent(item.slug)}/` : `${encodeURIComponent(item.slug)}/`);
+    return `<article class="item"><a href="${escapeHtml(href)}">${escapeHtml(item.title || item.slug)}</a><span>${escapeHtml(item.updatedAt || '')}</span><p>${escapeHtml(item.sourcePath || '')}</p></article>`;
+  }).join('\n');
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(title)}</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f7f7f4;color:#1f2933}
+main{max-width:960px;margin:0 auto;padding:40px 20px}
+h1{font-size:34px;margin:0 0 8px}.meta{color:#68737d;margin:0 0 24px}
+.item{background:#fff;border:1px solid #dde2e6;border-radius:8px;margin:12px 0;padding:16px}
+.item a{color:#174ea6;font-size:20px;font-weight:700;text-decoration:none}.item span{display:block;color:#68737d;margin-top:6px}.item p{color:#4b5563;margin:8px 0 0}
+</style>
+</head>
+<body><main><h1>${escapeHtml(title)}</h1><p class="meta">${items.length} published document(s)</p>${list || '<p>No published documents yet.</p>'}</main></body>
+</html>`;
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 module.exports = {
   buildPagesUrl,
   buildPublishPath,
+  buildShareHomeUrl,
   inferPagesBaseUrl,
   mimeTypeForPath,
   normalizePublishPath,
   parseRepo,
+  renderShareIndexHtml,
+  updateShareIndex,
 };

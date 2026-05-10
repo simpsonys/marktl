@@ -26,6 +26,9 @@ export class MarktlResultModal extends Modal {
     if (this.summary.publicUrl) {
       this.addFact(facts, 'Public URL', this.summary.publicUrl);
     }
+    if (this.summary.shareHomeUrl) {
+      this.addFact(facts, 'Share home', this.summary.shareHomeUrl);
+    }
 
     if (this.summary.warnings.length > 0) {
       contentEl.createEl('h3', { text: 'Warnings' });

@@ -9,7 +9,7 @@ import type { ExportOptions, ExportSummary, MarktlSettings, PreviewState } from 
 
 const { convertWithAiFallback } = require('./core/ai.js');
 const { buildAssetFileName, extractMarkdownImageReferences, rewriteHtmlImageSources } = require('./core/assets.js');
-const { buildPagesUrl, buildPublishPath, inferPagesBaseUrl, parseRepo } = require('./core/github-pages.js');
+const { buildPagesUrl, buildPublishPath, buildShareHomeUrl, inferPagesBaseUrl, parseRepo, renderShareIndexHtml, updateShareIndex } = require('./core/github-pages.js');
 const { slugify } = require('./core/html.js');
 
 const DEFAULT_SETTINGS: MarktlSettings = {
@@ -27,6 +27,7 @@ const DEFAULT_SETTINGS: MarktlSettings = {
   githubToken: '',
   githubPagesBaseUrl: '',
   githubPublishPath: 'marktl',
+  githubShareHomeTitle: 'MarkTL Shared HTML',
   timeoutMs: 300000,
   claudePath: '',
   geminiPath: '',
@@ -196,13 +197,16 @@ export default class MarktlPlugin extends Plugin {
       const html = rewriteHtmlImageSources(result.html, assetResult.mappings);
       const warnings = [...result.warnings, ...assetResult.warnings];
       let publicUrl = '';
+      let shareHomeUrl = '';
 
       progress.addStep('Writing HTML file to vault...');
       await this.copyImageAssets(assetResult.mappings);
       const outputPath = await this.writeHtmlFile(outputPlan, html, options, file.path);
       if (options.shareTarget === 'github-pages') {
         progress.addStep('Publishing GitHub Pages bundle...');
-        publicUrl = await this.publishGithubPages(outputPlan, assetResult.mappings);
+        const publishResult = await this.publishGithubPages(outputPlan, assetResult.mappings, file.path);
+        publicUrl = publishResult.publicUrl;
+        shareHomeUrl = publishResult.shareHomeUrl;
         progress.addStep(`Published: ${publicUrl}`);
       }
       progress.addStep('Opening internal preview pane...');
@@ -228,6 +232,7 @@ export default class MarktlPlugin extends Plugin {
         shareTarget: options.shareTarget,
         copiedShareLink: options.copyShareLinkAfterExport,
         publicUrl,
+        shareHomeUrl,
       });
       if (result.usedFallback && options.aiProvider !== 'none') {
         new Notice('AI conversion failed; local fallback HTML was generated.');
@@ -387,7 +392,7 @@ export default class MarktlPlugin extends Plugin {
     await this.app.vault.adapter.write(readmePath, content);
   }
 
-  private async publishGithubPages(plan: OutputPlan, mappings: ImageAssetMapping[]): Promise<string> {
+  private async publishGithubPages(plan: OutputPlan, mappings: ImageAssetMapping[], sourcePath: string): Promise<{ publicUrl: string; shareHomeUrl: string }> {
     const repo = parseRepo(this.settings.githubRepo);
     if (!repo) {
       throw new Error('GitHub Pages repo is not configured. Use owner/repo in MarkTL settings.');
@@ -399,6 +404,8 @@ export default class MarktlPlugin extends Plugin {
     const branch = this.settings.githubBranch.trim() || 'main';
     const basePath = this.settings.githubPublishPath;
     const pagesBaseUrl = this.settings.githubPagesBaseUrl.trim() || inferPagesBaseUrl(this.settings.githubRepo);
+    const publicUrl = buildPagesUrl(pagesBaseUrl, basePath, plan.basename);
+    const shareHomeUrl = buildShareHomeUrl(pagesBaseUrl, basePath);
     const files = [
       { localPath: plan.outputPath, publishPath: buildPublishPath(basePath, plan.basename, 'index.html') },
       { localPath: normalizePath(`${plan.folder}/share/${plan.basename}/README.md`), publishPath: buildPublishPath(basePath, plan.basename, 'README.md') },
@@ -413,12 +420,55 @@ export default class MarktlPlugin extends Plugin {
       await this.putGithubFile(repo.owner, repo.repo, branch, file.publishPath, binary);
     }
 
-    return buildPagesUrl(pagesBaseUrl, basePath, plan.basename);
+    await this.publishShareIndex(repo.owner, repo.repo, branch, basePath, {
+      slug: plan.basename,
+      title: plan.basename,
+      url: publicUrl,
+      sourcePath,
+    }, pagesBaseUrl);
+
+    return { publicUrl, shareHomeUrl };
+  }
+
+  private async publishShareIndex(owner: string, repo: string, branch: string, basePath: string, entry: { slug: string; title: string; url: string; sourcePath: string }, pagesBaseUrl: string): Promise<void> {
+    const indexPath = buildPublishPath(basePath, '', 'index.json');
+    const existing = await this.getGithubJson(owner, repo, branch, indexPath);
+    const index = updateShareIndex(existing, entry);
+    const html = renderShareIndexHtml(index, {
+      title: this.settings.githubShareHomeTitle || 'MarkTL Shared HTML',
+      baseUrl: buildShareHomeUrl(pagesBaseUrl, basePath).replace(/\/+$/g, ''),
+    });
+    await this.putGithubTextFile(owner, repo, branch, indexPath, JSON.stringify(index, null, 2));
+    await this.putGithubTextFile(owner, repo, branch, buildPublishPath(basePath, '', 'index.html'), html);
+  }
+
+  private async getGithubJson(owner: string, repo: string, branch: string, publishPath: string): Promise<unknown> {
+    const token = this.settings.githubToken.trim();
+    const url = this.githubContentsUrl(owner, repo, publishPath);
+    const response = await requestUrl({
+      url: `${url}?ref=${encodeURIComponent(branch)}`,
+      method: 'GET',
+      headers: this.githubHeaders(token),
+      throw: false,
+    });
+    if (response.status < 200 || response.status >= 300) {
+      return null;
+    }
+    try {
+      return JSON.parse(this.base64ToText(response.json?.content || ''));
+    } catch {
+      return null;
+    }
+  }
+
+  private async putGithubTextFile(owner: string, repo: string, branch: string, publishPath: string, text: string): Promise<void> {
+    const encoded = new TextEncoder().encode(text);
+    await this.putGithubFile(owner, repo, branch, publishPath, encoded.buffer);
   }
 
   private async putGithubFile(owner: string, repo: string, branch: string, publishPath: string, data: ArrayBuffer): Promise<void> {
     const token = this.settings.githubToken.trim();
-    const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${publishPath.split('/').map(encodeURIComponent).join('/')}`;
+    const url = this.githubContentsUrl(owner, repo, publishPath);
     const existing = await requestUrl({
       url: `${url}?ref=${encodeURIComponent(branch)}`,
       method: 'GET',
@@ -447,6 +497,10 @@ export default class MarktlPlugin extends Plugin {
     }
   }
 
+  private githubContentsUrl(owner: string, repo: string, publishPath: string): string {
+    return `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${publishPath.split('/').filter(Boolean).map(encodeURIComponent).join('/')}`;
+  }
+
   private githubHeaders(token: string): Record<string, string> {
     return {
       Authorization: `Bearer ${token}`,
@@ -462,6 +516,10 @@ export default class MarktlPlugin extends Plugin {
       binary += String.fromCharCode(bytes[index]);
     }
     return btoa(binary);
+  }
+
+  private base64ToText(value: string): string {
+    return atob(String(value || '').replace(/\s/g, ''));
   }
 
   private openResultSummary(summary: ExportSummary): void {
