@@ -2,7 +2,7 @@ import { App, Modal, Notice, Setting } from 'obsidian';
 import type MarktlPlugin from './main';
 import type { ArtifactGoal, ArtifactType, ConversionMode, PreviewSecurity } from './types';
 
-const { checkClaudeProvider } = require('./core/provider-doctor.js');
+const { checkClaudeProvider, checkCodexProvider } = require('./core/provider-doctor.js');
 
 export class MarktlSetupModal extends Modal {
   private plugin: MarktlPlugin;
@@ -37,6 +37,12 @@ export class MarktlSetupModal extends Modal {
       apply: () => this.applyClaudeDefaults(),
     });
     this.addSetupCard(cards, {
+      title: 'Use Codex',
+      body: 'Use Codex CLI for OpenAI-powered HTML artifacts.',
+      button: 'Use Codex mode',
+      apply: () => this.applyCodexDefaults(),
+    });
+    this.addSetupCard(cards, {
       title: 'Prepare sharing',
       body: 'Create GitHub Pages-ready folders and publish public links after settings are filled.',
       button: 'Use Pages mode',
@@ -50,7 +56,12 @@ export class MarktlSetupModal extends Modal {
       .addButton((button) => button
         .setButtonText('Check Claude CLI')
         .onClick(() => {
-          void this.runDoctor();
+          void this.runDoctor('claude');
+        }))
+      .addButton((button) => button
+        .setButtonText('Check Codex CLI')
+        .onClick(() => {
+          void this.runDoctor('codex');
         }))
       .addButton((button) => button
         .setButtonText('Finish setup')
@@ -107,7 +118,22 @@ export class MarktlSetupModal extends Modal {
       shareTarget: 'local-link',
     });
     await this.plugin.saveSettings();
-    await this.runDoctor();
+    await this.runDoctor('claude');
+  }
+
+  private async applyCodexDefaults(): Promise<void> {
+    Object.assign(this.plugin.settings, {
+      setupCompleted: true,
+      aiProvider: 'codex',
+      artifactGoal: 'review' as ArtifactGoal,
+      artifactType: 'interactive-explainer' as ArtifactType,
+      template: 'interactive-report',
+      conversionMode: 'presentation' as ConversionMode,
+      previewSecurity: 'trusted' as PreviewSecurity,
+      shareTarget: 'local-link',
+    });
+    await this.plugin.saveSettings();
+    await this.runDoctor('codex');
   }
 
   private async applyBundleDefaults(): Promise<void> {
@@ -130,19 +156,23 @@ export class MarktlSetupModal extends Modal {
       return;
     }
     this.doctorEl.empty();
-    this.doctorEl.createEl('strong', { text: 'Claude doctor' });
+    this.doctorEl.createEl('strong', { text: 'AI CLI doctor' });
     this.doctorEl.createEl('p', {
-      text: 'Optional. Checks whether Claude Code CLI is installed and logged in.',
+      text: 'Optional. Checks whether Claude Code CLI or Codex CLI is installed and logged in.',
     });
   }
 
-  private async runDoctor(): Promise<void> {
+  private async runDoctor(provider: 'claude' | 'codex' = 'claude'): Promise<void> {
     if (!this.doctorEl) {
       return;
     }
+    const label = provider === 'codex' ? 'Codex CLI' : 'Claude CLI';
     this.doctorEl.empty();
-    this.doctorEl.createEl('strong', { text: 'Checking Claude CLI...' });
-    const result = await checkClaudeProvider({
+    this.doctorEl.createEl('strong', { text: `Checking ${label}...` });
+    const result = provider === 'codex' ? await checkCodexProvider({
+      command: this.plugin.settings.codexPath || 'codex',
+      timeoutMs: 15000,
+    }) : await checkClaudeProvider({
       command: this.plugin.settings.claudePath || 'claude',
       timeoutMs: 15000,
     });
@@ -150,7 +180,7 @@ export class MarktlSetupModal extends Modal {
     this.doctorEl.toggleClass('marktl-doctor-ok', result.ok);
     this.doctorEl.toggleClass('marktl-doctor-error', !result.ok);
     this.doctorEl.createEl('strong', {
-      text: result.ok ? 'Claude is ready' : 'Claude needs attention',
+      text: result.ok ? `${label} is ready` : `${label} needs attention`,
     });
     this.doctorEl.createEl('p', { text: result.message });
     if (result.version) {

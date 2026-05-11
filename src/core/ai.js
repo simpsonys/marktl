@@ -120,7 +120,7 @@ function runProcess(command, args, options) {
     const child = spawn(command, args, {
       env: options.env,
       shell: Boolean(options.shell),
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
     let stdout = '';
     let stderr = '';
@@ -150,6 +150,10 @@ function runProcess(command, args, options) {
         child.kill('SIGTERM');
       }
     });
+    if (options.input) {
+      child.stdin.write(options.input);
+    }
+    child.stdin.end();
     child.on('error', (error) => {
       if (settled) {
         return;

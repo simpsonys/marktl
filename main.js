@@ -971,7 +971,7 @@ var require_ai = __commonJS({
         const child = spawn(command, args, {
           env: options.env,
           shell: Boolean(options.shell),
-          stdio: ["ignore", "pipe", "pipe"]
+          stdio: ["pipe", "pipe", "pipe"]
         });
         let stdout = "";
         let stderr = "";
@@ -999,6 +999,10 @@ var require_ai = __commonJS({
             child.kill("SIGTERM");
           }
         });
+        if (options.input) {
+          child.stdin.write(options.input);
+        }
+        child.stdin.end();
         child.on("error", (error) => {
           if (settled) {
             return;
@@ -1218,43 +1222,68 @@ var require_provider_doctor = __commonJS({
     var { spawn } = require("node:child_process");
     var { mergePath } = require_ai();
     async function checkClaudeProvider2(options = {}) {
+      return checkTextProvider({
+        ...options,
+        command: options.command || "claude",
+        name: "Claude Code CLI",
+        versionArgs: ["--version"],
+        probeArgs: ["-p", "Return only this exact text: MARKTL_OK"],
+        readyMessage: "Claude Code CLI is installed, logged in, and ready.",
+        missingMessage: "Claude Code CLI was not found or did not start.",
+        failedMessage: "Claude Code CLI is installed, but the login probe failed."
+      });
+    }
+    async function checkCodexProvider2(options = {}) {
+      return checkTextProvider({
+        ...options,
+        command: options.command || "codex",
+        name: "Codex CLI",
+        versionArgs: ["--version"],
+        probeArgs: ["exec", "--json", "--sandbox", "read-only", "-"],
+        probeInput: "Return only this exact text: MARKTL_OK",
+        readyMessage: "Codex CLI is installed, logged in, and ready.",
+        missingMessage: "Codex CLI was not found or did not start.",
+        failedMessage: "Codex CLI is installed, but the probe failed."
+      });
+    }
+    async function checkTextProvider(options = {}) {
       const command = options.command || "claude";
       const timeoutMs = Number(options.timeoutMs || 15e3);
       const runner = options.runCommand || runCommand;
-      const version = await runner(command, ["--version"], timeoutMs);
+      const version = await runner(command, options.versionArgs || ["--version"], timeoutMs);
       if (version.code !== 0) {
         return {
           ok: false,
           status: "missing",
-          message: cleanDoctorOutput(version.output) || "Claude Code CLI was not found or did not start.",
+          message: cleanDoctorOutput(version.output) || options.missingMessage || `${options.name || "Provider"} was not found or did not start.`,
           version: ""
         };
       }
-      const probe = await runner(command, ["-p", "Return only this exact text: MARKTL_OK"], timeoutMs);
+      const probe = await runner(command, options.probeArgs, timeoutMs, options.probeInput);
       if (probe.code !== 0) {
         const output = cleanDoctorOutput(probe.output);
         return {
           ok: false,
           status: output.toLowerCase().includes("not logged in") ? "not-logged-in" : "probe-failed",
-          message: output || "Claude Code CLI is installed, but the login probe failed.",
+          message: output || options.failedMessage || `${options.name || "Provider"} is installed, but the probe failed.`,
           version: cleanDoctorOutput(version.output)
         };
       }
       return {
         ok: /MARKTL_OK/i.test(probe.output),
         status: /MARKTL_OK/i.test(probe.output) ? "ready" : "unexpected-output",
-        message: /MARKTL_OK/i.test(probe.output) ? "Claude Code CLI is installed, logged in, and ready." : cleanDoctorOutput(probe.output) || "Claude Code CLI responded, but not with the expected probe text.",
+        message: /MARKTL_OK/i.test(probe.output) ? options.readyMessage || `${options.name || "Provider"} is installed, logged in, and ready.` : cleanDoctorOutput(probe.output) || `${options.name || "Provider"} responded, but not with the expected probe text.`,
         version: cleanDoctorOutput(version.output)
       };
     }
-    function runCommand(command, args, timeoutMs) {
+    function runCommand(command, args, timeoutMs, input = "") {
       return new Promise((resolve) => {
         const child = spawn(command, args, {
           env: {
             ...process.env,
             PATH: mergePath(process.env.PATH)
           },
-          stdio: ["ignore", "pipe", "pipe"]
+          stdio: ["pipe", "pipe", "pipe"]
         });
         let output = "";
         let settled = false;
@@ -1272,6 +1301,10 @@ var require_provider_doctor = __commonJS({
         child.stderr.on("data", (chunk) => {
           output += chunk;
         });
+        if (input) {
+          child.stdin.write(input);
+        }
+        child.stdin.end();
         child.on("error", (error) => {
           if (settled) {
             return;
@@ -1294,6 +1327,7 @@ var require_provider_doctor = __commonJS({
       return String(value || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, 6).join("\n");
     }
     module2.exports = {
+      checkCodexProvider: checkCodexProvider2,
       checkClaudeProvider: checkClaudeProvider2,
       cleanDoctorOutput,
       runCommand
@@ -2248,7 +2282,7 @@ var MarktlSettingTab = class extends import_obsidian5.PluginSettingTab {
 
 // src/setup-modal.ts
 var import_obsidian6 = require("obsidian");
-var { checkClaudeProvider } = require_provider_doctor();
+var { checkClaudeProvider, checkCodexProvider } = require_provider_doctor();
 var MarktlSetupModal = class extends import_obsidian6.Modal {
   constructor(app, plugin) {
     super(app);
@@ -2277,6 +2311,12 @@ var MarktlSetupModal = class extends import_obsidian6.Modal {
       apply: () => this.applyClaudeDefaults()
     });
     this.addSetupCard(cards, {
+      title: "Use Codex",
+      body: "Use Codex CLI for OpenAI-powered HTML artifacts.",
+      button: "Use Codex mode",
+      apply: () => this.applyCodexDefaults()
+    });
+    this.addSetupCard(cards, {
       title: "Prepare sharing",
       body: "Create GitHub Pages-ready folders and publish public links after settings are filled.",
       button: "Use Pages mode",
@@ -2285,7 +2325,9 @@ var MarktlSetupModal = class extends import_obsidian6.Modal {
     this.doctorEl = contentEl.createDiv({ cls: "marktl-doctor-box" });
     this.renderDoctorIdle();
     new import_obsidian6.Setting(contentEl).addButton((button) => button.setButtonText("Check Claude CLI").onClick(() => {
-      void this.runDoctor();
+      void this.runDoctor("claude");
+    })).addButton((button) => button.setButtonText("Check Codex CLI").onClick(() => {
+      void this.runDoctor("codex");
     })).addButton((button) => button.setButtonText("Finish setup").setCta().onClick(async () => {
       this.plugin.settings.setupCompleted = true;
       await this.plugin.saveSettings();
@@ -2331,7 +2373,21 @@ var MarktlSetupModal = class extends import_obsidian6.Modal {
       shareTarget: "local-link"
     });
     await this.plugin.saveSettings();
-    await this.runDoctor();
+    await this.runDoctor("claude");
+  }
+  async applyCodexDefaults() {
+    Object.assign(this.plugin.settings, {
+      setupCompleted: true,
+      aiProvider: "codex",
+      artifactGoal: "review",
+      artifactType: "interactive-explainer",
+      template: "interactive-report",
+      conversionMode: "presentation",
+      previewSecurity: "trusted",
+      shareTarget: "local-link"
+    });
+    await this.plugin.saveSettings();
+    await this.runDoctor("codex");
   }
   async applyBundleDefaults() {
     Object.assign(this.plugin.settings, {
@@ -2352,18 +2408,22 @@ var MarktlSetupModal = class extends import_obsidian6.Modal {
       return;
     }
     this.doctorEl.empty();
-    this.doctorEl.createEl("strong", { text: "Claude doctor" });
+    this.doctorEl.createEl("strong", { text: "AI CLI doctor" });
     this.doctorEl.createEl("p", {
-      text: "Optional. Checks whether Claude Code CLI is installed and logged in."
+      text: "Optional. Checks whether Claude Code CLI or Codex CLI is installed and logged in."
     });
   }
-  async runDoctor() {
+  async runDoctor(provider = "claude") {
     if (!this.doctorEl) {
       return;
     }
+    const label = provider === "codex" ? "Codex CLI" : "Claude CLI";
     this.doctorEl.empty();
-    this.doctorEl.createEl("strong", { text: "Checking Claude CLI..." });
-    const result = await checkClaudeProvider({
+    this.doctorEl.createEl("strong", { text: `Checking ${label}...` });
+    const result = provider === "codex" ? await checkCodexProvider({
+      command: this.plugin.settings.codexPath || "codex",
+      timeoutMs: 15e3
+    }) : await checkClaudeProvider({
       command: this.plugin.settings.claudePath || "claude",
       timeoutMs: 15e3
     });
@@ -2371,7 +2431,7 @@ var MarktlSetupModal = class extends import_obsidian6.Modal {
     this.doctorEl.toggleClass("marktl-doctor-ok", result.ok);
     this.doctorEl.toggleClass("marktl-doctor-error", !result.ok);
     this.doctorEl.createEl("strong", {
-      text: result.ok ? "Claude is ready" : "Claude needs attention"
+      text: result.ok ? `${label} is ready` : `${label} needs attention`
     });
     this.doctorEl.createEl("p", { text: result.message });
     if (result.version) {

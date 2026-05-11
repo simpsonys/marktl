@@ -197,6 +197,33 @@ test('codex provider uses stdin JSON exec mode', async () => {
   assert.match(captured.input, /# Prompt/);
 });
 
+test('provider process writes configured stdin input', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'marktl-stdin-'));
+  const fakeCli = path.join(tempDir, 'stdin-cli.js');
+  fs.writeFileSync(fakeCli, [
+    '#!/usr/bin/env node',
+    'let input = "";',
+    'process.stdin.on("data", (chunk) => { input += chunk; });',
+    'process.stdin.on("end", () => {',
+    '  process.stdout.write(input.includes("Stdin Works") ? "OK" : "MISSING");',
+    '});',
+    '',
+  ].join('\n'));
+  fs.chmodSync(fakeCli, 0o755);
+
+  try {
+    const result = await runCliProvider('# Stdin Works', {
+      provider: 'codex',
+      timeoutMs: 300000,
+      cliPaths: { codex: fakeCli },
+    });
+
+    assert.equal(result, 'OK');
+  } finally {
+    fs.rmSync(tempDir, { force: true, recursive: true });
+  }
+});
+
 test('provider process uses shell mode when requested for Windows CLI shims', async () => {
   let captured = null;
 

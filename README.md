@@ -34,7 +34,7 @@ MarkTL artifacts are designed to be:
 ### What It Does
 
 - Opens an export modal from the ribbon icon or command palette.
-- Opens a setup wizard on first run so beginners can choose local export, Claude AI, or share-ready bundles.
+- Opens a setup wizard on first run so beginners can choose local export, Claude, Codex, or share-ready bundles.
 - Lets you choose the artifact goal, artifact type, template, AI provider, conversion mode, preview security, and sharing behavior.
 - Converts the currently active Markdown note into HTML.
 - Saves the result to a vault folder, defaulting to `html-exports/`.
@@ -104,6 +104,7 @@ https://github.com/reallygood83/marktl
 2. If this is your first run, choose a setup path:
    - `Start simple`: no AI required.
    - `Use Claude`: checks Claude Code CLI installation and login.
+   - `Use Codex`: checks Codex CLI installation and login.
    - `Prepare sharing`: creates static-hosting-ready bundles.
 3. Click the MarkTL ribbon icon, or run `Export active note to HTML...` from the command palette.
 4. Choose an HTML preset such as `Readable Note`, `Interactive Report`, `Presentation`, `Decision Room`, `Shareable Article`, `Prompt Playground`, `Compare Options`, or `PR / Code Explainer`.
@@ -297,7 +298,7 @@ MarkTL artifact는 다음을 목표로 합니다.
 ### 주요 기능
 
 - 리본 아이콘 또는 명령 팔레트에서 export 모달을 엽니다.
-- 첫 실행 시 setup wizard를 열어 local export, Claude AI, share-ready bundle 중 쉽게 선택할 수 있습니다.
+- 첫 실행 시 setup wizard를 열어 local export, Claude, Codex, share-ready bundle 중 쉽게 선택할 수 있습니다.
 - artifact goal, artifact type, 템플릿, AI provider, 변환 모드, preview 보안, 공유 방식을 선택할 수 있습니다.
 - 현재 열려 있는 Markdown 노트를 HTML로 변환합니다.
 - 기본적으로 vault 안의 `html-exports/` 폴더에 저장합니다.
@@ -367,6 +368,7 @@ https://github.com/reallygood83/marktl
 2. 첫 실행이라면 setup path를 선택합니다.
    - `Start simple`: AI 없이 바로 사용
    - `Use Claude`: Claude Code CLI 설치와 로그인 상태 확인
+   - `Use Codex`: Codex CLI 설치와 로그인 상태 확인
    - `Prepare sharing`: 정적 호스팅용 bundle 생성
 3. MarkTL 리본 아이콘을 클릭하거나 명령 팔레트에서 `Export active note to HTML...`을 실행합니다.
 4. `Readable Note`, `Interactive Report`, `Presentation`, `Decision Room`, `Shareable Article`, `Prompt Playground`, `Compare Options`, `PR / Code Explainer` 같은 HTML preset을 선택합니다.

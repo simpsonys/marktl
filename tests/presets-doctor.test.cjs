@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 
 const { listExportPresets, findExportPreset } = require('../src/core/presets.js');
 const { getArtifactGoalInstruction, listArtifactGoals } = require('../src/core/artifact-goals.js');
-const { checkClaudeProvider, cleanDoctorOutput } = require('../src/core/provider-doctor.js');
+const { checkClaudeProvider, checkCodexProvider, cleanDoctorOutput } = require('../src/core/provider-doctor.js');
 
 test('ships beginner-facing HTML value presets', () => {
   const presets = listExportPresets();
@@ -89,4 +89,33 @@ test('Claude doctor reports ready and unexpected-output states', async () => {
   assert.equal(ready.status, 'ready');
   assert.equal(unexpected.ok, false);
   assert.equal(unexpected.status, 'unexpected-output');
+});
+
+test('Codex doctor probes JSON exec through stdin', async () => {
+  const calls = [];
+  const ready = await checkCodexProvider({
+    runCommand: async (_command, args, _timeoutMs, input) => {
+      calls.push({ args, input });
+      return args.includes('--version')
+        ? { code: 0, output: 'codex 1.2.3' }
+        : { code: 0, output: '{"type":"item.completed","item":{"type":"agent_message","text":"MARKTL_OK"}}' };
+    },
+  });
+
+  assert.equal(ready.ok, true);
+  assert.equal(ready.status, 'ready');
+  assert.deepEqual(calls[1].args, ['exec', '--json', '--sandbox', 'read-only', '-']);
+  assert.match(calls[1].input, /MARKTL_OK/);
+});
+
+test('Codex doctor reports probe failures', async () => {
+  const result = await checkCodexProvider({
+    runCommand: async (_command, args) => args.includes('--version')
+      ? { code: 0, output: 'codex 1.2.3' }
+      : { code: 1, output: 'not authenticated' },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 'probe-failed');
+  assert.match(result.message, /not authenticated/);
 });
