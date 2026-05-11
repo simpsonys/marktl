@@ -782,7 +782,8 @@ var require_ai = __commonJS({
     var { convertMarkdownToHtml } = require_converter();
     var { looksLikeHtmlDocument, sanitizeHtml } = require_sanitizer();
     var providerCommands = {
-      claude: { command: "claude", args: ["-p"], promptAsArgument: true }
+      claude: { command: "claude", args: ["-p"], promptAsArgument: true },
+      codex: { command: "codex", args: ["exec", "--json", "--sandbox", "read-only", "-"], parser: "codex-json", promptAsArgument: false }
     };
     var cliPath = [
       "/opt/homebrew/bin",
@@ -843,7 +844,8 @@ var require_ai = __commonJS({
         execOptions.input = prompt;
       }
       try {
-        const { stdout, stderr } = await runProcess(command, args, execOptions);
+        const executeProcess = options.runProcess || runProcess;
+        const { stdout, stderr } = await executeProcess(command, args, execOptions);
         const output = parseProviderOutput(stdout, provider);
         if (!String(output || "").trim()) {
           throw new Error(`AI provider returned empty output${stderr ? `: ${cleanProviderError(stderr)}` : ""}`);
@@ -1637,7 +1639,7 @@ var MarktlExportModal = class extends import_obsidian.Modal {
         this.options.template = value;
       });
     });
-    new import_obsidian.Setting(contentEl).setName("AI CLI").setDesc("Only providers that passed live plugin-style execution are shown.").addDropdown((dropdown) => dropdown.addOption("none", "None / local fallback").addOption("claude", "Claude Code CLI").setValue(this.options.aiProvider).onChange((value) => {
+    new import_obsidian.Setting(contentEl).setName("AI CLI").setDesc("Only providers that passed live plugin-style execution are shown.").addDropdown((dropdown) => dropdown.addOption("none", "None / local fallback").addOption("claude", "Claude Code CLI").addOption("codex", "Codex CLI").setValue(this.options.aiProvider).onChange((value) => {
       this.options.aiProvider = value;
     }));
     new import_obsidian.Setting(contentEl).setName("Mode").setDesc("Preserve keeps content faithful; other modes allow AI restructuring.").addDropdown((dropdown) => dropdown.addOption("preserve", "Preserve content").addOption("presentation", "Presentation").addOption("blog", "Blog article").addOption("landing", "Landing page").setValue(this.options.conversionMode).onChange((value) => {
@@ -1899,7 +1901,7 @@ var MarktlSettingTab = class extends import_obsidian5.PluginSettingTab {
         await this.plugin.saveSettings();
       });
     });
-    new import_obsidian5.Setting(containerEl).setName("AI provider").setDesc("Optional CLI provider for high-quality AI conversion.").addDropdown((dropdown) => dropdown.addOption("none", "None / local fallback").addOption("claude", "Claude Code CLI").setValue(this.plugin.settings.aiProvider).onChange(async (value) => {
+    new import_obsidian5.Setting(containerEl).setName("AI provider").setDesc("Optional CLI provider for high-quality AI conversion.").addDropdown((dropdown) => dropdown.addOption("none", "None / local fallback").addOption("claude", "Claude Code CLI").addOption("codex", "Codex CLI").setValue(this.plugin.settings.aiProvider).onChange(async (value) => {
       this.plugin.settings.aiProvider = value;
       await this.plugin.saveSettings();
     }));
@@ -1925,6 +1927,7 @@ var MarktlSettingTab = class extends import_obsidian5.PluginSettingTab {
       await this.plugin.saveSettings();
     }));
     this.addCliPathSetting(containerEl, "Claude Code CLI path", "claudePath", "claude");
+    this.addCliPathSetting(containerEl, "Codex CLI path", "codexPath", "codex");
     new import_obsidian5.Setting(containerEl).setName("Share target").setDesc("GitHub Pages publishes the generated bundle and copies a public URL.").addDropdown((dropdown) => dropdown.addOption("local-link", "Local file link").addOption("static-bundle", "Static hosting bundle").addOption("github-pages", "GitHub Pages link").setValue(this.plugin.settings.shareTarget).onChange(async (value) => {
       this.plugin.settings.shareTarget = value;
       await this.plugin.saveSettings();
@@ -2144,6 +2147,7 @@ var DEFAULT_SETTINGS = {
   giscusTheme: "preferred_color_scheme",
   timeoutMs: 3e5,
   claudePath: "",
+  codexPath: "",
   geminiPath: "",
   copyShareLinkAfterExport: false
 };
@@ -2210,7 +2214,7 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
     let shouldSave = false;
-    if (["codex", "gemini"].includes(this.settings.aiProvider)) {
+    if (["gemini"].includes(this.settings.aiProvider)) {
       this.settings.aiProvider = "none";
       shouldSave = true;
     }
@@ -2285,7 +2289,8 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
         assetMappings: assetResult.mappings,
         contextPack: contextResult.markdown,
         cliPaths: {
-          claude: this.settings.claudePath
+          claude: this.settings.claudePath,
+          codex: this.settings.codexPath
         }
       });
       progress.addStep(result.usedFallback ? "Generated local fallback HTML." : "Generated AI HTML.");

@@ -41,6 +41,7 @@ const DEFAULT_SETTINGS: MarktlSettings = {
   giscusTheme: 'preferred_color_scheme',
   timeoutMs: 300000,
   claudePath: '',
+  codexPath: '',
   geminiPath: '',
   copyShareLinkAfterExport: false,
 };
@@ -132,7 +133,7 @@ export default class MarktlPlugin extends Plugin {
   async loadSettings(): Promise<void> {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
     let shouldSave = false;
-    if (['codex', 'gemini'].includes(this.settings.aiProvider as string)) {
+    if (['gemini'].includes(this.settings.aiProvider as string)) {
       this.settings.aiProvider = 'none';
       shouldSave = true;
     }
@@ -217,6 +218,7 @@ export default class MarktlPlugin extends Plugin {
         contextPack: contextResult.markdown,
         cliPaths: {
           claude: this.settings.claudePath,
+          codex: this.settings.codexPath,
         },
       });
       progress.addStep(result.usedFallback ? 'Generated local fallback HTML.' : 'Generated AI HTML.');

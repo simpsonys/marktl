@@ -1,4 +1,4 @@
-export type AiProvider = 'none' | 'claude';
+export type AiProvider = 'none' | 'claude' | 'codex';
 export type ArtifactType = 'faithful-note' | 'strategy-brief' | 'research-report' | 'decision-memo' | 'interactive-explainer' | 'slide-deck';
 export type ConversionMode = 'preserve' | 'presentation' | 'blog' | 'landing';
 export type FailurePolicy = 'fallback' | 'strict';
@@ -33,6 +33,7 @@ export interface MarktlSettings {
   giscusTheme: string;
   timeoutMs: number;
   claudePath: string;
+  codexPath: string;
   geminiPath: string;
   copyShareLinkAfterExport: boolean;
 }

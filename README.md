@@ -138,9 +138,10 @@ MarkTL runs a basic post-generation HTML QA pass before writing and previewing t
 Currently verified:
 
 - Claude Code CLI
+- Codex CLI
 
-Codex CLI is intentionally not shown in the UI for now because plugin-style child-process probes were not stable enough.
-Gemini CLI is also hidden for now because the local plugin-style probe did not complete reliably.
+Codex runs through `codex exec --json --sandbox read-only -` and reads the generated prompt from stdin. If Obsidian cannot find the command, set the full Codex CLI path in settings.
+Gemini CLI is hidden for now because the local plugin-style probe did not complete reliably.
 
 Rich AI artifacts can take several minutes. MarkTL defaults the CLI timeout to 5 minutes and migrates older 60-second settings upward because Claude Code can exceed 60 seconds on long Korean notes.
 
@@ -367,9 +368,10 @@ MarkTL은 HTML을 저장하고 preview하기 전에 기본 QA를 실행합니다
 현재 검증된 provider:
 
 - Claude Code CLI
+- Codex CLI
 
-Codex CLI는 현재 플러그인 child-process 실행 안정성이 충분하지 않아 UI에서 제외했습니다.
-Gemini CLI도 현재 로컬 plugin-style probe가 안정적으로 완료되지 않아 UI에서 제외했습니다.
+Codex는 `codex exec --json --sandbox read-only -` 형태로 실행되며 생성 prompt를 stdin으로 전달합니다. Obsidian이 명령을 찾지 못하면 설정에 Codex CLI 전체 경로를 입력하세요.
+Gemini CLI는 현재 로컬 plugin-style probe가 안정적으로 완료되지 않아 UI에서 제외했습니다.
 
 풍부한 AI artifact는 몇 분이 걸릴 수 있습니다. MarkTL은 CLI timeout 기본값을 5분으로 두며, 기존 60초 설정은 자동으로 5분으로 올립니다. 긴 한국어 노트에서 Claude Code가 60초를 넘는 경우가 있었기 때문입니다.
 

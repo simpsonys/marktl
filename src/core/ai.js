@@ -8,6 +8,7 @@ const { looksLikeHtmlDocument, sanitizeHtml } = require('./sanitizer.js');
 
 const providerCommands = {
   claude: { command: 'claude', args: ['-p'], promptAsArgument: true },
+  codex: { command: 'codex', args: ['exec', '--json', '--sandbox', 'read-only', '-'], parser: 'codex-json', promptAsArgument: false },
 };
 
 const cliPath = [
@@ -78,7 +79,8 @@ async function runCliProvider(markdown, options = {}) {
   }
 
   try {
-    const { stdout, stderr } = await runProcess(command, args, execOptions);
+    const executeProcess = options.runProcess || runProcess;
+    const { stdout, stderr } = await executeProcess(command, args, execOptions);
 
     const output = parseProviderOutput(stdout, provider);
     if (!String(output || '').trim()) {

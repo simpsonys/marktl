@@ -75,6 +75,7 @@ export class MarktlSettingTab extends PluginSettingTab {
       .addDropdown((dropdown) => dropdown
         .addOption('none', 'None / local fallback')
         .addOption('claude', 'Claude Code CLI')
+        .addOption('codex', 'Codex CLI')
         .setValue(this.plugin.settings.aiProvider)
         .onChange(async (value) => {
           this.plugin.settings.aiProvider = value as AiProvider;
@@ -144,6 +145,7 @@ export class MarktlSettingTab extends PluginSettingTab {
         }));
 
     this.addCliPathSetting(containerEl, 'Claude Code CLI path', 'claudePath', 'claude');
+    this.addCliPathSetting(containerEl, 'Codex CLI path', 'codexPath', 'codex');
 
     new Setting(containerEl)
       .setName('Share target')
@@ -207,7 +209,7 @@ export class MarktlSettingTab extends PluginSettingTab {
         }));
   }
 
-  private addCliPathSetting(containerEl: HTMLElement, name: string, key: 'claudePath', placeholder: string): void {
+  private addCliPathSetting(containerEl: HTMLElement, name: string, key: 'claudePath' | 'codexPath', placeholder: string): void {
     new Setting(containerEl)
       .setName(name)
       .setDesc('Leave blank to use the command from PATH.')

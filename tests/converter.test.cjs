@@ -151,6 +151,47 @@ test('AI conversion accepts fenced or explained HTML responses by extracting the
   assert.match(result.html, /Designed Note/);
 });
 
+test('codex JSONL output returns the final agent HTML message', async () => {
+  const stdout = [
+    '{"type":"thread.started","thread_id":"demo"}',
+    '{"type":"item.completed","item":{"type":"error","message":"diagnostic warning"}}',
+    '{"type":"item.completed","item":{"type":"agent_message","text":"<!doctype html><html><body><h1>Codex</h1></body></html>"}}',
+    '{"type":"turn.completed"}',
+  ].join('\n');
+
+  const result = await convertWithAiFallback('# Source', {
+    provider: 'codex',
+    mode: 'presentation',
+    template: 'deck',
+    strictAiFailures: true,
+    runProvider: async () => stdout,
+  });
+
+  assert.equal(result.usedFallback, false);
+  assert.match(result.html, /<h1>Codex<\/h1>/);
+});
+
+test('codex provider uses stdin JSON exec mode', async () => {
+  let captured = null;
+
+  await assert.rejects(
+    () => runCliProvider('# Prompt', {
+      provider: 'codex',
+      timeoutMs: 1,
+      cliPaths: { codex: 'node' },
+      runProcess: (command, args, options) => {
+        captured = { command, args, input: options.input };
+        throw new Error('stop');
+      },
+    }),
+    /Cannot find module|Provider exited|timed out|stop/,
+  );
+
+  assert.equal(captured.command, 'node');
+  assert.deepEqual(captured.args, ['exec', '--json', '--sandbox', 'read-only', '-']);
+  assert.match(captured.input, /# Prompt/);
+});
+
 test('AI prompt can be passed as a provider argument', () => {
   const prompt = buildPrompt('# Arg Mode', {
     mode: 'preserve',
