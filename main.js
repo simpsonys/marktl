@@ -1738,6 +1738,45 @@ var require_html_qa = __commonJS({
   }
 });
 
+// src/core/settings.js
+var require_settings = __commonJS({
+  "src/core/settings.js"(exports2, module2) {
+    "use strict";
+    function firstString(...values) {
+      for (const value of values) {
+        if (typeof value === "string" && value.trim()) {
+          return value.trim();
+        }
+      }
+      return "";
+    }
+    function migrateSettings2(defaultSettings, rawSettings) {
+      const raw = rawSettings && typeof rawSettings === "object" ? rawSettings : {};
+      const settings = Object.assign({}, defaultSettings, raw);
+      let migrated = false;
+      const legacyRepo = firstString(raw.githubRepository, raw.repository);
+      if (!firstString(settings.githubRepo) && legacyRepo) {
+        settings.githubRepo = legacyRepo;
+        migrated = true;
+      }
+      const legacyPublishPath = firstString(raw.publishPath, raw.githubPath);
+      if ((!firstString(settings.githubPublishPath) || settings.githubPublishPath === defaultSettings.githubPublishPath) && legacyPublishPath) {
+        settings.githubPublishPath = legacyPublishPath;
+        migrated = true;
+      }
+      const legacyShareHomeTitle = firstString(raw.shareHomeTitle);
+      if ((!firstString(settings.githubShareHomeTitle) || settings.githubShareHomeTitle === defaultSettings.githubShareHomeTitle) && legacyShareHomeTitle) {
+        settings.githubShareHomeTitle = legacyShareHomeTitle;
+        migrated = true;
+      }
+      return { settings, migrated };
+    }
+    module2.exports = {
+      migrateSettings: migrateSettings2
+    };
+  }
+});
+
 // src/core/social.js
 var require_social = __commonJS({
   "src/core/social.js"(exports2, module2) {
@@ -2448,6 +2487,7 @@ var { injectReaderFeedback, validateGiscusConfig } = require_feedback();
 var { buildPagesUrl, buildPublishPath, buildShareHomeUrl, buildShortPagesUrl, inferPagesBaseUrl, parseRepo, renderShareIndexHtml, updateShareIndex } = require_github_pages();
 var { validateHtmlArtifact } = require_html_qa();
 var { slugify } = require_html();
+var { migrateSettings } = require_settings();
 var { buildShortId, injectSocialMeta } = require_social();
 var DEFAULT_SETTINGS = {
   exportFolder: "html-exports",
@@ -2541,8 +2581,9 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_MARKTL_PREVIEW);
   }
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-    let shouldSave = false;
+    const migratedSettings = migrateSettings(DEFAULT_SETTINGS, await this.loadData());
+    this.settings = migratedSettings.settings;
+    let shouldSave = migratedSettings.migrated;
     if (["gemini"].includes(this.settings.aiProvider)) {
       this.settings.aiProvider = "none";
       shouldSave = true;

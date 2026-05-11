@@ -14,6 +14,7 @@ const { injectReaderFeedback, validateGiscusConfig } = require('./core/feedback.
 const { buildPagesUrl, buildPublishPath, buildShareHomeUrl, buildShortPagesUrl, inferPagesBaseUrl, parseRepo, renderShareIndexHtml, updateShareIndex } = require('./core/github-pages.js');
 const { validateHtmlArtifact } = require('./core/html-qa.js');
 const { slugify } = require('./core/html.js');
+const { migrateSettings } = require('./core/settings.js');
 const { buildShortId, injectSocialMeta } = require('./core/social.js');
 
 const DEFAULT_SETTINGS: MarktlSettings = {
@@ -133,8 +134,9 @@ export default class MarktlPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-    let shouldSave = false;
+    const migratedSettings = migrateSettings(DEFAULT_SETTINGS, await this.loadData());
+    this.settings = migratedSettings.settings;
+    let shouldSave = migratedSettings.migrated;
     if (['gemini'].includes(this.settings.aiProvider as string)) {
       this.settings.aiProvider = 'none';
       shouldSave = true;
