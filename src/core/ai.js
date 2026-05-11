@@ -195,6 +195,7 @@ function buildPrompt(markdown, options = {}) {
   const dynamicInstruction = options.trusted
     ? 'Trusted mode is enabled: you may include small inline JavaScript for useful interactions, animations, toggles, table-of-contents behavior, or reveal effects. Keep it self-contained and do not load remote resources.'
     : 'Sanitized mode is enabled: do not use JavaScript, iframes, external CSS, external scripts, or remote assets. Use rich CSS-only layout and interactions instead.';
+  const affordanceInstruction = getGoalAffordanceInstruction(artifactGoal, Boolean(options.trusted));
 
   return `Convert this Obsidian Markdown note to a complete standalone HTML document.
 Artifact goal: ${artifactGoal}
@@ -206,6 +207,7 @@ Artifact instruction: ${artifactInstruction}
 Instruction: ${modeInstruction}
 Design standard: produce a refined, modern, visually designed HTML page rather than plain Markdown-looking output. Use responsive CSS, strong spacing, tasteful color, cards/sections where helpful, and readable Korean typography if the content is Korean.
 Dynamic policy: ${dynamicInstruction}
+Goal-specific affordances: ${affordanceInstruction}
 Interaction standard: when trusted mode is enabled, make the HTML useful as an AI artifact surface, not just a document. Include local-only controls such as generated table of contents, section collapse, copy as prompt/markdown/summary buttons, annotations, editable review state, sliders, scorecards, or lightweight filters when they fit the artifact goal. End with a clear copy-back-to-AI affordance when the artifact supports decisions, review, comparison, or tuning. Keep everything self-contained.
 ${buildAiAssetInstruction(options.assetMappings)}
 ${options.contextPack ? `\nContext pack:\n${options.contextPack}\n` : ''}
@@ -251,6 +253,21 @@ function extractHtmlFromAiOutput(output) {
   }
 
   return candidate;
+}
+
+function getGoalAffordanceInstruction(artifactGoal, trusted) {
+  const policy = trusted
+    ? 'Use inline, local-only controls when useful.'
+    : 'Do not use scripts; express the affordance with static sections, anchors, tables, and copy-ready text blocks.';
+  return {
+    read: `Prioritize navigation, readability, and visual hierarchy. Avoid unnecessary controls. ${policy}`,
+    decide: `Include decision question, criteria, options, tradeoffs, recommendation, dissent, and a copy-back decision summary. ${policy}`,
+    review: `Include section-level review prompts, feedback checklist, and a copy-feedback-to-AI area. ${policy}`,
+    compare: `Include side-by-side options, scorecards, comparison matrix, and filters or toggles in trusted mode. ${policy}`,
+    tune: `Include editable/review notes, state JSON, and copy-next-prompt affordances in trusted mode. ${policy}`,
+    'explain-code': `Include code or diff navigation, reviewer checklist, risk sections, and next-review prompt. ${policy}`,
+    publish: 'Include social-friendly title, description, share framing, and polished article structure. In sanitized mode, avoid JavaScript entirely.',
+  }[artifactGoal] || `Make the artifact's intended next action obvious. ${policy}`;
 }
 
 function mergePath(existingPath = '', options = {}) {
@@ -390,6 +407,7 @@ function cleanProviderError(value = '') {
 module.exports = {
   buildPrompt,
   getArtifactInstruction,
+  getGoalAffordanceInstruction,
   convertWithAiFallback,
   extractHtmlFromAiOutput,
   discoverUserCliPaths,

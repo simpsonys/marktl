@@ -45,12 +45,23 @@ Important linked note details.
 test('validates generated HTML artifact basics and asset references', () => {
   const warnings = validateHtmlArtifact('<html><head></head><body><h1>x</h1><img src="missing.png"></body></html>', {
     trusted: true,
+    artifactGoal: 'review',
     assetMappings: [{ relativeSrc: 'assets/chart.png' }],
   });
 
   assert.match(warnings.join('\n'), /missing <!doctype html>/);
   assert.match(warnings.join('\n'), /missing responsive viewport/);
   assert.match(warnings.join('\n'), /trusted interactive mode produced no script/);
+  assert.match(warnings.join('\n'), /review artifact has no obvious/);
   assert.match(warnings.join('\n'), /assets\/chart\.png/);
   assert.match(warnings.join('\n'), /missing alt text/);
+});
+
+test('does not require interactive controls for trusted read artifacts', () => {
+  const warnings = validateHtmlArtifact('<!doctype html><html><head><meta name="viewport" content="width=device-width"><style>body{}</style><script></script></head><body><h1>x</h1></body></html>', {
+    trusted: true,
+    artifactGoal: 'read',
+  });
+
+  assert.doesNotMatch(warnings.join('\n'), /no obvious copy-back/);
 });

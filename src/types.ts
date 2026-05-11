@@ -41,6 +41,7 @@ export interface MarktlSettings {
 }
 
 export interface ExportOptions {
+  presetId?: string;
   artifactGoal: ArtifactGoal;
   artifactType: ArtifactType;
   template: string;
@@ -55,6 +56,11 @@ export interface ExportOptions {
 }
 
 export interface ExportSummary {
+  sourcePath?: string;
+  sourceTitle?: string;
+  presetId?: string;
+  previewSecurity: PreviewSecurity;
+  localPath: string;
   outputPath: string;
   usedFallback: boolean;
   aiProvider: AiProvider;
@@ -72,6 +78,9 @@ export interface ExportSummary {
 export interface PreviewState {
   html: string;
   filePath: string;
+  sourcePath?: string;
+  title?: string;
   warnings: string[];
   trusted: boolean;
+  previewSecurity: PreviewSecurity;
 }

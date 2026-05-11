@@ -4,11 +4,13 @@ import type { ExportSummary } from './types';
 export class MarktlResultModal extends Modal {
   private summary: ExportSummary;
   private copyLink: (outputPath: string, preferredLink?: string) => Promise<string>;
+  private regenerate: (presetId: string) => void;
 
-  constructor(app: App, summary: ExportSummary, copyLink: (outputPath: string, preferredLink?: string) => Promise<string>) {
+  constructor(app: App, summary: ExportSummary, copyLink: (outputPath: string, preferredLink?: string) => Promise<string>, regenerate: (presetId: string) => void) {
     super(app);
     this.summary = summary;
     this.copyLink = copyLink;
+    this.regenerate = regenerate;
   }
 
   onOpen(): void {
@@ -35,6 +37,7 @@ export class MarktlResultModal extends Modal {
 
     const facts = contentEl.createDiv({ cls: 'marktl-summary-grid' });
     this.addFact(facts, 'Output', this.summary.outputPath);
+    this.addFact(facts, 'Preview', this.summary.previewSecurity === 'trusted' ? 'Trusted interactive' : 'Sanitized static');
     this.addFact(facts, 'AI', this.summary.aiProvider === 'none'
       ? 'Local converter'
       : this.summary.usedFallback ? `${this.summary.aiProvider} failed; local fallback used` : `${this.summary.aiProvider} generated HTML`);
@@ -106,6 +109,24 @@ export class MarktlResultModal extends Modal {
           });
       })
       .addButton((button) => button
+        .setButtonText('Copy AI handoff')
+        .onClick(async () => {
+          await navigator.clipboard.writeText(this.buildAiHandoffPrompt());
+          new Notice('Copied AI handoff prompt.');
+        }))
+      .addButton((button) => button
+        .setButtonText('Regenerate slides')
+        .onClick(() => {
+          this.close();
+          this.regenerate('presentation');
+        }))
+      .addButton((button) => button
+        .setButtonText('Regenerate interactive')
+        .onClick(() => {
+          this.close();
+          this.regenerate('interactive-report');
+        }))
+      .addButton((button) => button
         .setButtonText('Close')
         .setCta()
         .onClick(() => this.close()));
@@ -126,5 +147,22 @@ export class MarktlResultModal extends Modal {
       return 'GitHub Pages link';
     }
     return this.summary.shareTarget === 'static-bundle' ? 'Static hosting bundle' : 'Local file link';
+  }
+
+  private buildAiHandoffPrompt(): string {
+    return [
+      'Use this MarkTL HTML artifact as context for the next iteration.',
+      '',
+      `Source note: ${this.summary.sourcePath || this.summary.sourceTitle || 'Unknown source note'}`,
+      `HTML output: ${this.summary.publicUrl || this.summary.localPath || this.summary.outputPath}`,
+      `Preview security: ${this.summary.previewSecurity}`,
+      `Share target: ${this.describeShareTarget()}`,
+      this.summary.publicUrl ? `Public URL: ${this.summary.publicUrl}` : '',
+      '',
+      'Task:',
+      '- Review the artifact as a visual HTML output, not just as Markdown text.',
+      '- Identify what should be clearer, more visual, or more interactive.',
+      '- Suggest the next concrete revision.',
+    ].filter(Boolean).join('\n');
   }
 }

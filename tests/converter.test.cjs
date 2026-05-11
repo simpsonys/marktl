@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { buildPrompt, cleanProviderError, convertWithAiFallback, discoverUserCliPaths, extractHtmlFromAiOutput, getArtifactInstruction, mergePath, runCliProvider } = require('../src/core/ai.js');
+const { buildPrompt, cleanProviderError, convertWithAiFallback, discoverUserCliPaths, extractHtmlFromAiOutput, getArtifactInstruction, getGoalAffordanceInstruction, mergePath, runCliProvider } = require('../src/core/ai.js');
 
 test('local conversion renders frontmatter, callouts, embeds, and Markdown content', () => {
   const markdown = `---
@@ -106,10 +106,19 @@ test('AI prompt asks for designed output and gates dynamic HTML by trusted mode'
   assert.match(sanitizedPrompt, /Artifact type: decision-memo/);
   assert.match(sanitizedPrompt, /comparison matrix/);
   assert.match(sanitizedPrompt, /do not use JavaScript/);
+  assert.match(sanitizedPrompt, /Goal-specific affordances/);
+  assert.match(sanitizedPrompt, /copy-back decision summary/);
   assert.match(trustedPrompt, /you may include small inline JavaScript/);
   assert.match(trustedPrompt, /AI artifact surface/);
   assert.match(trustedPrompt, /copy-back-to-AI/);
   assert.match(trustedPrompt, /do not load remote resources/);
+});
+
+test('goal affordance instructions preserve trusted and sanitized boundaries', () => {
+  assert.match(getGoalAffordanceInstruction('review', true), /copy-feedback-to-AI/);
+  assert.match(getGoalAffordanceInstruction('review', true), /inline, local-only controls/);
+  assert.match(getGoalAffordanceInstruction('publish', false), /avoid JavaScript entirely/);
+  assert.match(getGoalAffordanceInstruction('read', false), /Avoid unnecessary controls/);
 });
 
 test('AI prompt can include linked-note context packs', () => {

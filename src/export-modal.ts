@@ -10,12 +10,14 @@ export class MarktlExportModal extends Modal {
   private plugin: MarktlPlugin;
   private onSubmit: (options: ExportOptions) => void;
   private selectedPreset = 'custom';
+  private showAdvanced = false;
 
   constructor(app: App, plugin: MarktlPlugin, onSubmit: (options: ExportOptions) => void) {
     super(app);
     this.plugin = plugin;
     this.onSubmit = onSubmit;
     this.options = {
+      presetId: 'custom',
       template: plugin.settings.template,
       artifactGoal: plugin.settings.artifactGoal,
       artifactType: plugin.settings.artifactType,
@@ -40,6 +42,23 @@ export class MarktlExportModal extends Modal {
       text: 'Choose what the HTML should do, then choose the visual style. MarkTL works best when the artifact has a job.',
     });
 
+    this.renderPresetCards(contentEl);
+
+    new Setting(contentEl)
+      .setName('Advanced')
+      .setDesc('Adjust provider, security, sharing, and exact artifact settings.')
+      .addButton((button) => button
+        .setButtonText(this.showAdvanced ? 'Hide advanced' : 'Show advanced')
+        .onClick(() => {
+          this.showAdvanced = !this.showAdvanced;
+          this.onOpen();
+        }));
+
+    if (!this.showAdvanced) {
+      this.renderActions(contentEl);
+      return;
+    }
+
     new Setting(contentEl)
       .setName('HTML preset')
       .setDesc('Applies sensible defaults. You can still adjust individual fields below.')
@@ -49,18 +68,7 @@ export class MarktlExportModal extends Modal {
           dropdown.addOption(preset.id, preset.name);
         }
         dropdown.setValue(this.selectedPreset).onChange((value) => {
-          const preset = findExportPreset(value);
-          if (!preset) {
-            this.selectedPreset = 'custom';
-            return;
-          }
-          this.selectedPreset = preset.id;
-          this.options.artifactGoal = preset.artifactGoal as ArtifactGoal;
-          this.options.artifactType = preset.artifactType as ArtifactType;
-          this.options.template = preset.template;
-          this.options.conversionMode = preset.mode as ConversionMode;
-          this.options.previewSecurity = preset.previewSecurity as PreviewSecurity;
-          this.onOpen();
+          this.applyPreset(value);
         });
       });
 
@@ -72,6 +80,8 @@ export class MarktlExportModal extends Modal {
           dropdown.addOption(goal.id, goal.name);
         }
         dropdown.setValue(this.options.artifactGoal).onChange((value) => {
+          this.selectedPreset = 'custom';
+          this.options.presetId = 'custom';
           this.options.artifactGoal = value as ArtifactGoal;
         });
       });
@@ -88,6 +98,8 @@ export class MarktlExportModal extends Modal {
         .addOption('slide-deck', 'Slide Deck')
         .setValue(this.options.artifactType)
         .onChange((value) => {
+          this.selectedPreset = 'custom';
+          this.options.presetId = 'custom';
           this.options.artifactType = value as ArtifactType;
         }));
 
@@ -99,6 +111,8 @@ export class MarktlExportModal extends Modal {
           dropdown.addOption(template.id, template.name);
         }
         dropdown.setValue(this.options.template).onChange((value) => {
+          this.selectedPreset = 'custom';
+          this.options.presetId = 'custom';
           this.options.template = value;
         });
       });
@@ -125,6 +139,8 @@ export class MarktlExportModal extends Modal {
         .addOption('landing', 'Landing page')
         .setValue(this.options.conversionMode)
         .onChange((value) => {
+          this.selectedPreset = 'custom';
+          this.options.presetId = 'custom';
           this.options.conversionMode = value as ConversionMode;
         }));
 
@@ -136,6 +152,8 @@ export class MarktlExportModal extends Modal {
         .addOption('trusted', 'Trusted interactive preview')
         .setValue(this.options.previewSecurity)
         .onChange((value) => {
+          this.selectedPreset = 'custom';
+          this.options.presetId = 'custom';
           this.options.previewSecurity = value as PreviewSecurity;
         }));
 
@@ -198,7 +216,62 @@ export class MarktlExportModal extends Modal {
           this.options.copyShareLinkAfterExport = value;
         }));
 
-    new Setting(contentEl)
+    this.renderActions(contentEl);
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+
+  private renderPresetCards(container: HTMLElement): void {
+    const cards = container.createDiv({ cls: 'marktl-purpose-cards' });
+    const labels: Record<string, string> = {
+      'readable-note': 'Read better',
+      presentation: 'Present it',
+      'interactive-report': 'Review it',
+      'compare-options': 'Compare options',
+      'shareable-article': 'Publish/share',
+      playground: 'Work with AI again',
+    };
+    const order = ['readable-note', 'presentation', 'interactive-report', 'compare-options', 'shareable-article', 'playground'];
+    for (const id of order) {
+      const preset = findExportPreset(id);
+      if (!preset) {
+        continue;
+      }
+      const card = cards.createDiv({
+        cls: `marktl-purpose-card${this.selectedPreset === id ? ' is-selected' : ''}`,
+      });
+      card.createEl('h3', { text: labels[id] || preset.name });
+      card.createEl('p', { text: preset.description });
+      card.createEl('span', {
+        cls: 'marktl-purpose-meta',
+        text: preset.previewSecurity === 'trusted' ? 'Interactive HTML' : 'Safe static HTML',
+      });
+      card.addEventListener('click', () => this.applyPreset(id));
+    }
+  }
+
+  private applyPreset(id: string): void {
+    const preset = findExportPreset(id);
+    if (!preset) {
+      this.selectedPreset = 'custom';
+      this.options.presetId = 'custom';
+      this.onOpen();
+      return;
+    }
+    this.selectedPreset = preset.id;
+    this.options.presetId = preset.id;
+    this.options.artifactGoal = preset.artifactGoal as ArtifactGoal;
+    this.options.artifactType = preset.artifactType as ArtifactType;
+    this.options.template = preset.template;
+    this.options.conversionMode = preset.mode as ConversionMode;
+    this.options.previewSecurity = preset.previewSecurity as PreviewSecurity;
+    this.onOpen();
+  }
+
+  private renderActions(container: HTMLElement): void {
+    new Setting(container)
       .addButton((button) => button
         .setButtonText('Export')
         .setCta()
@@ -209,14 +282,11 @@ export class MarktlExportModal extends Modal {
       .addButton((button) => button
         .setButtonText('Save as defaults')
         .onClick(async () => {
-          Object.assign(this.plugin.settings, this.options);
+          const { presetId: _presetId, ...settings } = this.options;
+          Object.assign(this.plugin.settings, settings);
           await this.plugin.saveSettings();
           this.close();
           this.onSubmit(this.options);
         }));
-  }
-
-  onClose(): void {
-    this.contentEl.empty();
   }
 }

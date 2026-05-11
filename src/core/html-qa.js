@@ -16,11 +16,15 @@ function validateHtmlArtifact(html, options = {}) {
   }
 
   const trusted = Boolean(options.trusted);
+  const artifactGoal = String(options.artifactGoal || '');
   if (trusted && !/<script\b/i.test(value)) {
     warnings.push('HTML QA: trusted interactive mode produced no script; artifact may be static.');
   }
   if (!trusted && /<script\b|<iframe\b|\son[a-z]+\s*=/i.test(value)) {
     warnings.push('HTML QA: sanitized mode output still contains dynamic markup.');
+  }
+  if (trusted && ['review', 'compare', 'tune'].includes(artifactGoal) && !/<button\b|<input\b|<select\b|<textarea\b|contenteditable=/i.test(value)) {
+    warnings.push(`HTML QA: ${artifactGoal} artifact has no obvious copy-back or interactive controls.`);
   }
 
   const expectedAssets = Array.isArray(options.assetMappings)

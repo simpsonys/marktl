@@ -20,32 +20,32 @@ export class MarktlSetupModal extends Modal {
 
     contentEl.createEl('p', {
       cls: 'marktl-modal-intro',
-      text: 'Choose the simplest setup that matches how you want to use HTML exports.',
+      text: 'Choose the outcome you want from your HTML artifacts. Provider setup stays optional until you need richer AI-generated output.',
     });
 
     const cards = contentEl.createDiv({ cls: 'marktl-setup-cards' });
     this.addSetupCard(cards, {
-      title: 'Start simple',
-      body: 'Local HTML export, bundled images, safe preview. No AI setup required.',
+      title: 'Start with safe local HTML',
+      body: 'Turn notes into readable local HTML with bundled images and sanitized preview. No AI setup required.',
       button: 'Use local export',
       apply: () => this.applySimpleDefaults(),
     });
     this.addSetupCard(cards, {
-      title: 'Use Claude',
-      body: 'Use Claude Code CLI for more designed reports and interactive artifacts.',
-      button: 'Use Claude mode',
+      title: 'Make visual AI artifacts',
+      body: 'Use Claude Code CLI to reshape long notes into designed reports, explainers, and slide-like pages.',
+      button: 'Use Claude',
       apply: () => this.applyClaudeDefaults(),
     });
     this.addSetupCard(cards, {
-      title: 'Use Codex',
-      body: 'Use Codex CLI for OpenAI-powered HTML artifacts.',
-      button: 'Use Codex mode',
+      title: 'Create interactive review surfaces',
+      body: 'Use Codex CLI for HTML artifacts with review prompts, copy-back controls, and local interactivity.',
+      button: 'Use Codex',
       apply: () => this.applyCodexDefaults(),
     });
     this.addSetupCard(cards, {
-      title: 'Prepare sharing',
-      body: 'Create GitHub Pages-ready folders and publish public links after settings are filled.',
-      button: 'Use Pages mode',
+      title: 'Publish public links',
+      body: 'Prepare GitHub Pages-ready bundles with share links and optional Giscus reader feedback.',
+      button: 'Prepare sharing',
       apply: () => this.applyBundleDefaults(),
     });
 

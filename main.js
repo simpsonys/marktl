@@ -184,11 +184,11 @@ var require_presets = __commonJS({
     function listExportPresets2() {
       return exportPresets.slice();
     }
-    function findExportPreset2(id) {
+    function findExportPreset3(id) {
       return exportPresets.find((preset) => preset.id === id) || null;
     }
     module2.exports = {
-      findExportPreset: findExportPreset2,
+      findExportPreset: findExportPreset3,
       listExportPresets: listExportPresets2
     };
   }
@@ -1041,6 +1041,7 @@ var require_ai = __commonJS({
         landing: "Create a landing-page-style HTML document with strong hero treatment, benefit sections, emphasis copy, and deliberate visual hierarchy."
       }[options.mode || "preserve"];
       const dynamicInstruction = options.trusted ? "Trusted mode is enabled: you may include small inline JavaScript for useful interactions, animations, toggles, table-of-contents behavior, or reveal effects. Keep it self-contained and do not load remote resources." : "Sanitized mode is enabled: do not use JavaScript, iframes, external CSS, external scripts, or remote assets. Use rich CSS-only layout and interactions instead.";
+      const affordanceInstruction = getGoalAffordanceInstruction(artifactGoal, Boolean(options.trusted));
       return `Convert this Obsidian Markdown note to a complete standalone HTML document.
 Artifact goal: ${artifactGoal}
 Artifact type: ${options.artifactType || "faithful-note"}
@@ -1051,6 +1052,7 @@ Artifact instruction: ${artifactInstruction}
 Instruction: ${modeInstruction}
 Design standard: produce a refined, modern, visually designed HTML page rather than plain Markdown-looking output. Use responsive CSS, strong spacing, tasteful color, cards/sections where helpful, and readable Korean typography if the content is Korean.
 Dynamic policy: ${dynamicInstruction}
+Goal-specific affordances: ${affordanceInstruction}
 Interaction standard: when trusted mode is enabled, make the HTML useful as an AI artifact surface, not just a document. Include local-only controls such as generated table of contents, section collapse, copy as prompt/markdown/summary buttons, annotations, editable review state, sliders, scorecards, or lightweight filters when they fit the artifact goal. End with a clear copy-back-to-AI affordance when the artifact supports decisions, review, comparison, or tuning. Keep everything self-contained.
 ${buildAiAssetInstruction(options.assetMappings)}
 ${options.contextPack ? `
@@ -1092,6 +1094,18 @@ ${markdown}`;
         return candidate.slice(firstTag, lastTag + 1).trim();
       }
       return candidate;
+    }
+    function getGoalAffordanceInstruction(artifactGoal, trusted) {
+      const policy = trusted ? "Use inline, local-only controls when useful." : "Do not use scripts; express the affordance with static sections, anchors, tables, and copy-ready text blocks.";
+      return {
+        read: `Prioritize navigation, readability, and visual hierarchy. Avoid unnecessary controls. ${policy}`,
+        decide: `Include decision question, criteria, options, tradeoffs, recommendation, dissent, and a copy-back decision summary. ${policy}`,
+        review: `Include section-level review prompts, feedback checklist, and a copy-feedback-to-AI area. ${policy}`,
+        compare: `Include side-by-side options, scorecards, comparison matrix, and filters or toggles in trusted mode. ${policy}`,
+        tune: `Include editable/review notes, state JSON, and copy-next-prompt affordances in trusted mode. ${policy}`,
+        "explain-code": `Include code or diff navigation, reviewer checklist, risk sections, and next-review prompt. ${policy}`,
+        publish: "Include social-friendly title, description, share framing, and polished article structure. In sanitized mode, avoid JavaScript entirely."
+      }[artifactGoal] || `Make the artifact's intended next action obvious. ${policy}`;
     }
     function mergePath(existingPath = "", options = {}) {
       const platform = options.platform || process.platform;
@@ -1204,6 +1218,7 @@ ${markdown}`;
     module2.exports = {
       buildPrompt,
       getArtifactInstruction,
+      getGoalAffordanceInstruction,
       convertWithAiFallback: convertWithAiFallback2,
       extractHtmlFromAiOutput,
       discoverUserCliPaths,
@@ -1718,11 +1733,15 @@ var require_html_qa = __commonJS({
         warnings.push("HTML QA: no H1 heading found.");
       }
       const trusted = Boolean(options.trusted);
+      const artifactGoal = String(options.artifactGoal || "");
       if (trusted && !/<script\b/i.test(value)) {
         warnings.push("HTML QA: trusted interactive mode produced no script; artifact may be static.");
       }
       if (!trusted && /<script\b|<iframe\b|\son[a-z]+\s*=/i.test(value)) {
         warnings.push("HTML QA: sanitized mode output still contains dynamic markup.");
+      }
+      if (trusted && ["review", "compare", "tune"].includes(artifactGoal) && !/<button\b|<input\b|<select\b|<textarea\b|contenteditable=/i.test(value)) {
+        warnings.push(`HTML QA: ${artifactGoal} artifact has no obvious copy-back or interactive controls.`);
       }
       const expectedAssets = Array.isArray(options.assetMappings) ? options.assetMappings.map((mapping) => mapping.relativeSrc).filter(Boolean) : [];
       for (const src of expectedAssets) {
@@ -1845,9 +1864,11 @@ var MarktlExportModal = class extends import_obsidian.Modal {
   constructor(app, plugin, onSubmit) {
     super(app);
     this.selectedPreset = "custom";
+    this.showAdvanced = false;
     this.plugin = plugin;
     this.onSubmit = onSubmit;
     this.options = {
+      presetId: "custom",
       template: plugin.settings.template,
       artifactGoal: plugin.settings.artifactGoal,
       artifactType: plugin.settings.artifactType,
@@ -1869,24 +1890,22 @@ var MarktlExportModal = class extends import_obsidian.Modal {
       cls: "marktl-modal-intro",
       text: "Choose what the HTML should do, then choose the visual style. MarkTL works best when the artifact has a job."
     });
+    this.renderPresetCards(contentEl);
+    new import_obsidian.Setting(contentEl).setName("Advanced").setDesc("Adjust provider, security, sharing, and exact artifact settings.").addButton((button) => button.setButtonText(this.showAdvanced ? "Hide advanced" : "Show advanced").onClick(() => {
+      this.showAdvanced = !this.showAdvanced;
+      this.onOpen();
+    }));
+    if (!this.showAdvanced) {
+      this.renderActions(contentEl);
+      return;
+    }
     new import_obsidian.Setting(contentEl).setName("HTML preset").setDesc("Applies sensible defaults. You can still adjust individual fields below.").addDropdown((dropdown) => {
       dropdown.addOption("custom", "Custom");
       for (const preset of (0, import_presets.listExportPresets)()) {
         dropdown.addOption(preset.id, preset.name);
       }
       dropdown.setValue(this.selectedPreset).onChange((value) => {
-        const preset = (0, import_presets.findExportPreset)(value);
-        if (!preset) {
-          this.selectedPreset = "custom";
-          return;
-        }
-        this.selectedPreset = preset.id;
-        this.options.artifactGoal = preset.artifactGoal;
-        this.options.artifactType = preset.artifactType;
-        this.options.template = preset.template;
-        this.options.conversionMode = preset.mode;
-        this.options.previewSecurity = preset.previewSecurity;
-        this.onOpen();
+        this.applyPreset(value);
       });
     });
     new import_obsidian.Setting(contentEl).setName("Artifact goal").setDesc("The job of the HTML artifact: read, decide, review, compare, tune, explain code, or publish.").addDropdown((dropdown) => {
@@ -1894,10 +1913,14 @@ var MarktlExportModal = class extends import_obsidian.Modal {
         dropdown.addOption(goal.id, goal.name);
       }
       dropdown.setValue(this.options.artifactGoal).onChange((value) => {
+        this.selectedPreset = "custom";
+        this.options.presetId = "custom";
         this.options.artifactGoal = value;
       });
     });
     new import_obsidian.Setting(contentEl).setName("Artifact type").setDesc("Defines the information architecture, not just the visual skin.").addDropdown((dropdown) => dropdown.addOption("faithful-note", "Faithful Note").addOption("strategy-brief", "Strategy Brief").addOption("research-report", "Research Report").addOption("decision-memo", "Decision Memo").addOption("interactive-explainer", "Interactive Explainer").addOption("slide-deck", "Slide Deck").setValue(this.options.artifactType).onChange((value) => {
+      this.selectedPreset = "custom";
+      this.options.presetId = "custom";
       this.options.artifactType = value;
     }));
     new import_obsidian.Setting(contentEl).setName("Template").setDesc("Controls the visual direction and local fallback style.").addDropdown((dropdown) => {
@@ -1905,6 +1928,8 @@ var MarktlExportModal = class extends import_obsidian.Modal {
         dropdown.addOption(template.id, template.name);
       }
       dropdown.setValue(this.options.template).onChange((value) => {
+        this.selectedPreset = "custom";
+        this.options.presetId = "custom";
         this.options.template = value;
       });
     });
@@ -1912,9 +1937,13 @@ var MarktlExportModal = class extends import_obsidian.Modal {
       this.options.aiProvider = value;
     }));
     new import_obsidian.Setting(contentEl).setName("Mode").setDesc("Preserve keeps content faithful; other modes allow AI restructuring.").addDropdown((dropdown) => dropdown.addOption("preserve", "Preserve content").addOption("presentation", "Presentation").addOption("blog", "Blog article").addOption("landing", "Landing page").setValue(this.options.conversionMode).onChange((value) => {
+      this.selectedPreset = "custom";
+      this.options.presetId = "custom";
       this.options.conversionMode = value;
     }));
     new import_obsidian.Setting(contentEl).setName("Preview security").setDesc("Trusted mode allows inline JavaScript for interactive HTML.").addDropdown((dropdown) => dropdown.addOption("sanitized", "Sanitized static preview").addOption("trusted", "Trusted interactive preview").setValue(this.options.previewSecurity).onChange((value) => {
+      this.selectedPreset = "custom";
+      this.options.presetId = "custom";
       this.options.previewSecurity = value;
     }));
     new import_obsidian.Setting(contentEl).setName("Context pack").setDesc("Optionally lets AI read linked Markdown notes as supporting context.").addDropdown((dropdown) => dropdown.addOption("none", "Active note only").addOption("linked-notes", "Include linked notes").setValue(this.options.contextPackMode).onChange((value) => {
@@ -1937,18 +1966,67 @@ var MarktlExportModal = class extends import_obsidian.Modal {
     new import_obsidian.Setting(contentEl).setName("Copy share link").setDesc("Copies the public Pages URL after publish, or a local file:// link for local exports.").addToggle((toggle) => toggle.setValue(this.options.copyShareLinkAfterExport).onChange((value) => {
       this.options.copyShareLinkAfterExport = value;
     }));
-    new import_obsidian.Setting(contentEl).addButton((button) => button.setButtonText("Export").setCta().onClick(() => {
+    this.renderActions(contentEl);
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+  renderPresetCards(container) {
+    const cards = container.createDiv({ cls: "marktl-purpose-cards" });
+    const labels = {
+      "readable-note": "Read better",
+      presentation: "Present it",
+      "interactive-report": "Review it",
+      "compare-options": "Compare options",
+      "shareable-article": "Publish/share",
+      playground: "Work with AI again"
+    };
+    const order = ["readable-note", "presentation", "interactive-report", "compare-options", "shareable-article", "playground"];
+    for (const id of order) {
+      const preset = (0, import_presets.findExportPreset)(id);
+      if (!preset) {
+        continue;
+      }
+      const card = cards.createDiv({
+        cls: `marktl-purpose-card${this.selectedPreset === id ? " is-selected" : ""}`
+      });
+      card.createEl("h3", { text: labels[id] || preset.name });
+      card.createEl("p", { text: preset.description });
+      card.createEl("span", {
+        cls: "marktl-purpose-meta",
+        text: preset.previewSecurity === "trusted" ? "Interactive HTML" : "Safe static HTML"
+      });
+      card.addEventListener("click", () => this.applyPreset(id));
+    }
+  }
+  applyPreset(id) {
+    const preset = (0, import_presets.findExportPreset)(id);
+    if (!preset) {
+      this.selectedPreset = "custom";
+      this.options.presetId = "custom";
+      this.onOpen();
+      return;
+    }
+    this.selectedPreset = preset.id;
+    this.options.presetId = preset.id;
+    this.options.artifactGoal = preset.artifactGoal;
+    this.options.artifactType = preset.artifactType;
+    this.options.template = preset.template;
+    this.options.conversionMode = preset.mode;
+    this.options.previewSecurity = preset.previewSecurity;
+    this.onOpen();
+  }
+  renderActions(container) {
+    new import_obsidian.Setting(container).addButton((button) => button.setButtonText("Export").setCta().onClick(() => {
       this.close();
       this.onSubmit(this.options);
     })).addButton((button) => button.setButtonText("Save as defaults").onClick(async () => {
-      Object.assign(this.plugin.settings, this.options);
+      const { presetId: _presetId, ...settings } = this.options;
+      Object.assign(this.plugin.settings, settings);
       await this.plugin.saveSettings();
       this.close();
       this.onSubmit(this.options);
     }));
-  }
-  onClose() {
-    this.contentEl.empty();
   }
 };
 
@@ -2062,7 +2140,8 @@ var emptyState = {
   html: "<!doctype html><html><body><p>No preview loaded.</p></body></html>",
   filePath: "",
   warnings: [],
-  trusted: false
+  trusted: false,
+  previewSecurity: "sanitized"
 };
 var MarktlPreviewView = class extends import_obsidian3.ItemView {
   constructor(leaf) {
@@ -2094,14 +2173,21 @@ var MarktlPreviewView = class extends import_obsidian3.ItemView {
     container.addClass("marktl-preview-container");
     const header = container.createDiv({ cls: "marktl-preview-header" });
     header.createEl("strong", { text: this.state.filePath || "HTML Preview" });
-    if (this.state.trusted) {
-      header.createSpan({ cls: "marktl-preview-trusted", text: "Trusted" });
-    }
+    header.createSpan({
+      cls: this.state.trusted ? "marktl-preview-trusted" : "marktl-preview-sanitized",
+      text: this.state.trusted ? "Trusted interactive" : "Sanitized static"
+    });
+    let frame;
+    const tools = container.createDiv({ cls: "marktl-preview-tools" });
+    this.addToolButton(tools, "Copy as prompt", () => this.copyPrompt(frame));
+    this.addToolButton(tools, "Copy outline", () => this.copyOutline(frame));
+    this.addToolButton(tools, "Copy section feedback", () => this.copySectionFeedback(frame));
+    this.addToolButton(tools, "Open generated file", () => this.openGeneratedFile());
     for (const warning of this.state.warnings) {
       container.createDiv({ cls: "marktl-preview-warning", text: warning });
     }
     const renderQa = container.createDiv({ cls: "marktl-preview-render-qa", text: "Render QA: waiting for preview..." });
-    const frame = container.createEl("iframe", {
+    frame = container.createEl("iframe", {
       cls: "marktl-preview-frame",
       attr: {
         sandbox: this.state.trusted ? "allow-same-origin allow-scripts" : "allow-same-origin"
@@ -2111,6 +2197,60 @@ var MarktlPreviewView = class extends import_obsidian3.ItemView {
       this.runRenderQa(frame, renderQa);
     });
     frame.srcdoc = this.state.html;
+  }
+  addToolButton(container, label, onClick) {
+    const button = container.createEl("button", { text: label });
+    button.type = "button";
+    button.addEventListener("click", () => {
+      void onClick();
+    });
+  }
+  async copyPrompt(frame) {
+    const text = this.getFrameText(frame) || this.stripHtml(this.state.html);
+    await navigator.clipboard.writeText([
+      "Use this MarkTL HTML artifact as context for the next iteration.",
+      "",
+      `Artifact: ${this.state.title || this.state.filePath || "HTML Preview"}`,
+      `Preview security: ${this.state.previewSecurity}`,
+      "",
+      text
+    ].join("\n"));
+    new import_obsidian3.Notice("Copied preview prompt.");
+  }
+  async copyOutline(frame) {
+    const outline = this.getOutline(frame);
+    if (!outline) {
+      await navigator.clipboard.writeText(this.state.title || this.state.filePath || "HTML Preview");
+      new import_obsidian3.Notice("No headings found; copied artifact title.");
+      return;
+    }
+    await navigator.clipboard.writeText(outline);
+    new import_obsidian3.Notice("Copied preview outline.");
+  }
+  async copySectionFeedback(frame) {
+    const section = this.getFirstSection(frame);
+    const fallback = this.getFrameText(frame) || this.stripHtml(this.state.html);
+    await navigator.clipboard.writeText([
+      "Give feedback on this MarkTL HTML artifact section.",
+      "",
+      `Artifact: ${this.state.title || this.state.filePath || "HTML Preview"}`,
+      `Section: ${section.heading || "Whole document fallback"}`,
+      "",
+      section.text || fallback,
+      "",
+      "Focus on what should be clearer, more visual, or more interactive."
+    ].join("\n"));
+    new import_obsidian3.Notice(section.heading ? "Copied section feedback prompt." : "Copied whole-document feedback prompt.");
+  }
+  openGeneratedFile() {
+    if (!this.state.filePath) {
+      new import_obsidian3.Notice("No generated file path is available.");
+      return;
+    }
+    const adapter = this.app.vault.adapter;
+    const fullPath = adapter.getFullPath ? adapter.getFullPath(this.state.filePath) : this.state.filePath;
+    const target = fullPath.startsWith("/") ? `file://${encodeURI(fullPath)}` : encodeURI(fullPath);
+    window.open(target, "_blank", "noopener,noreferrer");
   }
   runRenderQa(frame, statusEl) {
     var _a, _b, _c, _d;
@@ -2147,15 +2287,61 @@ var MarktlPreviewView = class extends import_obsidian3.ItemView {
       statusEl.addClass("marktl-preview-render-qa-warning");
     }
   }
+  getFrameDocument(frame) {
+    try {
+      return frame.contentDocument;
+    } catch (e) {
+      return null;
+    }
+  }
+  getFrameText(frame) {
+    var _a, _b;
+    const doc = this.getFrameDocument(frame);
+    return ((_b = (_a = doc == null ? void 0 : doc.body) == null ? void 0 : _a.innerText) == null ? void 0 : _b.trim()) || "";
+  }
+  getOutline(frame) {
+    const doc = this.getFrameDocument(frame);
+    if (!doc) {
+      return "";
+    }
+    const headings = Array.from(doc.querySelectorAll("h1,h2,h3"));
+    return headings.map((heading) => {
+      var _a;
+      const level = Number(heading.tagName.slice(1));
+      return `${"  ".repeat(Math.max(0, level - 1))}- ${((_a = heading.textContent) == null ? void 0 : _a.trim()) || "Untitled"}`;
+    }).join("\n");
+  }
+  getFirstSection(frame) {
+    var _a, _b, _c;
+    const doc = this.getFrameDocument(frame);
+    const heading = doc == null ? void 0 : doc.querySelector("h2,h1,h3");
+    if (!doc || !heading) {
+      return { heading: "", text: "" };
+    }
+    const parts = [((_a = heading.textContent) == null ? void 0 : _a.trim()) || "Untitled"];
+    let node = heading.nextElementSibling;
+    while (node && !/^H[1-3]$/.test(node.tagName)) {
+      parts.push(((_b = node.textContent) == null ? void 0 : _b.trim()) || "");
+      node = node.nextElementSibling;
+    }
+    return {
+      heading: ((_c = heading.textContent) == null ? void 0 : _c.trim()) || "Untitled",
+      text: parts.filter(Boolean).join("\n\n")
+    };
+  }
+  stripHtml(html) {
+    return String(html || "").replace(/<script\b[\s\S]*?<\/script>/gi, "").replace(/<style\b[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  }
 };
 
 // src/result-modal.ts
 var import_obsidian4 = require("obsidian");
 var MarktlResultModal = class extends import_obsidian4.Modal {
-  constructor(app, summary, copyLink) {
+  constructor(app, summary, copyLink, regenerate) {
     super(app);
     this.summary = summary;
     this.copyLink = copyLink;
+    this.regenerate = regenerate;
   }
   onOpen() {
     const { contentEl } = this;
@@ -2177,6 +2363,7 @@ var MarktlResultModal = class extends import_obsidian4.Modal {
     }
     const facts = contentEl.createDiv({ cls: "marktl-summary-grid" });
     this.addFact(facts, "Output", this.summary.outputPath);
+    this.addFact(facts, "Preview", this.summary.previewSecurity === "trusted" ? "Trusted interactive" : "Sanitized static");
     this.addFact(facts, "AI", this.summary.aiProvider === "none" ? "Local converter" : this.summary.usedFallback ? `${this.summary.aiProvider} failed; local fallback used` : `${this.summary.aiProvider} generated HTML`);
     this.addFact(facts, "Images", `${this.summary.assetCount} bundled local image(s)`);
     this.addFact(facts, "Share target", this.describeShareTarget());
@@ -2222,7 +2409,16 @@ var MarktlResultModal = class extends import_obsidian4.Modal {
           window.open(this.summary.shareHomeUrl, "_blank", "noopener,noreferrer");
         }
       });
-    }).addButton((button) => button.setButtonText("Close").setCta().onClick(() => this.close()));
+    }).addButton((button) => button.setButtonText("Copy AI handoff").onClick(async () => {
+      await navigator.clipboard.writeText(this.buildAiHandoffPrompt());
+      new import_obsidian4.Notice("Copied AI handoff prompt.");
+    })).addButton((button) => button.setButtonText("Regenerate slides").onClick(() => {
+      this.close();
+      this.regenerate("presentation");
+    })).addButton((button) => button.setButtonText("Regenerate interactive").onClick(() => {
+      this.close();
+      this.regenerate("interactive-report");
+    })).addButton((button) => button.setButtonText("Close").setCta().onClick(() => this.close()));
   }
   onClose() {
     this.contentEl.empty();
@@ -2237,6 +2433,22 @@ var MarktlResultModal = class extends import_obsidian4.Modal {
       return "GitHub Pages link";
     }
     return this.summary.shareTarget === "static-bundle" ? "Static hosting bundle" : "Local file link";
+  }
+  buildAiHandoffPrompt() {
+    return [
+      "Use this MarkTL HTML artifact as context for the next iteration.",
+      "",
+      `Source note: ${this.summary.sourcePath || this.summary.sourceTitle || "Unknown source note"}`,
+      `HTML output: ${this.summary.publicUrl || this.summary.localPath || this.summary.outputPath}`,
+      `Preview security: ${this.summary.previewSecurity}`,
+      `Share target: ${this.describeShareTarget()}`,
+      this.summary.publicUrl ? `Public URL: ${this.summary.publicUrl}` : "",
+      "",
+      "Task:",
+      "- Review the artifact as a visual HTML output, not just as Markdown text.",
+      "- Identify what should be clearer, more visual, or more interactive.",
+      "- Suggest the next concrete revision."
+    ].filter(Boolean).join("\n");
   }
 };
 
@@ -2378,31 +2590,31 @@ var MarktlSetupModal = class extends import_obsidian6.Modal {
     this.setTitle("MarkTL setup");
     contentEl.createEl("p", {
       cls: "marktl-modal-intro",
-      text: "Choose the simplest setup that matches how you want to use HTML exports."
+      text: "Choose the outcome you want from your HTML artifacts. Provider setup stays optional until you need richer AI-generated output."
     });
     const cards = contentEl.createDiv({ cls: "marktl-setup-cards" });
     this.addSetupCard(cards, {
-      title: "Start simple",
-      body: "Local HTML export, bundled images, safe preview. No AI setup required.",
+      title: "Start with safe local HTML",
+      body: "Turn notes into readable local HTML with bundled images and sanitized preview. No AI setup required.",
       button: "Use local export",
       apply: () => this.applySimpleDefaults()
     });
     this.addSetupCard(cards, {
-      title: "Use Claude",
-      body: "Use Claude Code CLI for more designed reports and interactive artifacts.",
-      button: "Use Claude mode",
+      title: "Make visual AI artifacts",
+      body: "Use Claude Code CLI to reshape long notes into designed reports, explainers, and slide-like pages.",
+      button: "Use Claude",
       apply: () => this.applyClaudeDefaults()
     });
     this.addSetupCard(cards, {
-      title: "Use Codex",
-      body: "Use Codex CLI for OpenAI-powered HTML artifacts.",
-      button: "Use Codex mode",
+      title: "Create interactive review surfaces",
+      body: "Use Codex CLI for HTML artifacts with review prompts, copy-back controls, and local interactivity.",
+      button: "Use Codex",
       apply: () => this.applyCodexDefaults()
     });
     this.addSetupCard(cards, {
-      title: "Prepare sharing",
-      body: "Create GitHub Pages-ready folders and publish public links after settings are filled.",
-      button: "Use Pages mode",
+      title: "Publish public links",
+      body: "Prepare GitHub Pages-ready bundles with share links and optional Giscus reader feedback.",
+      button: "Prepare sharing",
       apply: () => this.applyBundleDefaults()
     });
     this.doctorEl = contentEl.createDiv({ cls: "marktl-doctor-box" });
@@ -2583,6 +2795,7 @@ var { validateHtmlArtifact } = require_html_qa();
 var { slugify } = require_html();
 var { migrateSettings } = require_settings();
 var { buildShortId, injectSocialMeta } = require_social();
+var { findExportPreset: findExportPreset2 } = require_presets();
 var DEFAULT_SETTINGS = {
   exportFolder: "html-exports",
   setupCompleted: false,
@@ -2782,6 +2995,7 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
       }
       const qaWarnings = validateHtmlArtifact(html, {
         trusted: options.previewSecurity === "trusted",
+        artifactGoal: options.artifactGoal,
         assetMappings: assetResult.mappings
       });
       if (qaWarnings.length > 0) {
@@ -2806,8 +3020,11 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
       await this.openPreview({
         html,
         filePath: outputPath,
+        sourcePath: file.path,
+        title: shareMetadata.title,
         warnings,
-        trusted: options.previewSecurity === "trusted"
+        trusted: options.previewSecurity === "trusted",
+        previewSecurity: options.previewSecurity
       });
       if (options.copyShareLinkAfterExport) {
         progress.addStep(publicUrl ? "Copying public share link..." : "Copying local share link...");
@@ -2815,6 +3032,11 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
       }
       progress.complete(`Done: ${outputPath}`);
       this.openResultSummary({
+        sourcePath: file.path,
+        sourceTitle: shareMetadata.title,
+        presetId: options.presetId,
+        previewSecurity: options.previewSecurity,
+        localPath: outputPath,
         outputPath,
         usedFallback: result.usedFallback,
         aiProvider: options.aiProvider,
@@ -2926,6 +3148,7 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
     var _a;
     return {
       template: overrides.template || this.settings.template,
+      presetId: overrides.presetId,
       artifactGoal: overrides.artifactGoal || this.settings.artifactGoal,
       artifactType: overrides.artifactType || this.settings.artifactType,
       aiProvider: overrides.aiProvider || this.settings.aiProvider,
@@ -3202,7 +3425,28 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
     return atob(String(value || "").replace(/\s/g, ""));
   }
   openResultSummary(summary) {
-    new MarktlResultModal(this.app, summary, (outputPath, preferredLink) => this.copyShareLink(outputPath, preferredLink)).open();
+    new MarktlResultModal(
+      this.app,
+      summary,
+      (outputPath, preferredLink) => this.copyShareLink(outputPath, preferredLink),
+      (presetId) => {
+        void this.exportActiveNote(this.optionsFromPreset(presetId));
+      }
+    ).open();
+  }
+  optionsFromPreset(presetId) {
+    const preset = findExportPreset2(presetId);
+    if (!preset) {
+      return {};
+    }
+    return {
+      presetId: preset.id,
+      artifactGoal: preset.artifactGoal,
+      artifactType: preset.artifactType,
+      template: preset.template,
+      conversionMode: preset.mode,
+      previewSecurity: preset.previewSecurity
+    };
   }
   async copyShareLink(outputPath, preferredLink = "") {
     if (preferredLink) {

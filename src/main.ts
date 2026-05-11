@@ -16,6 +16,7 @@ const { validateHtmlArtifact } = require('./core/html-qa.js');
 const { slugify } = require('./core/html.js');
 const { migrateSettings } = require('./core/settings.js');
 const { buildShortId, injectSocialMeta } = require('./core/social.js');
+const { findExportPreset } = require('./core/presets.js');
 
 const DEFAULT_SETTINGS: MarktlSettings = {
   exportFolder: 'html-exports',
@@ -254,6 +255,7 @@ export default class MarktlPlugin extends Plugin {
       }
       const qaWarnings = validateHtmlArtifact(html, {
         trusted: options.previewSecurity === 'trusted',
+        artifactGoal: options.artifactGoal,
         assetMappings: assetResult.mappings,
       });
       if (qaWarnings.length > 0) {
@@ -279,8 +281,11 @@ export default class MarktlPlugin extends Plugin {
       await this.openPreview({
         html,
         filePath: outputPath,
+        sourcePath: file.path,
+        title: shareMetadata.title,
         warnings,
         trusted: options.previewSecurity === 'trusted',
+        previewSecurity: options.previewSecurity,
       });
 
       if (options.copyShareLinkAfterExport) {
@@ -290,6 +295,11 @@ export default class MarktlPlugin extends Plugin {
 
       progress.complete(`Done: ${outputPath}`);
       this.openResultSummary({
+        sourcePath: file.path,
+        sourceTitle: shareMetadata.title,
+        presetId: options.presetId,
+        previewSecurity: options.previewSecurity,
+        localPath: outputPath,
         outputPath,
         usedFallback: result.usedFallback,
         aiProvider: options.aiProvider,
@@ -420,6 +430,7 @@ export default class MarktlPlugin extends Plugin {
   private resolveExportOptions(overrides: Partial<ExportOptions>): ExportOptions {
     return {
       template: overrides.template || this.settings.template,
+      presetId: overrides.presetId,
       artifactGoal: overrides.artifactGoal || this.settings.artifactGoal,
       artifactType: overrides.artifactType || this.settings.artifactType,
       aiProvider: overrides.aiProvider || this.settings.aiProvider,
@@ -740,7 +751,29 @@ export default class MarktlPlugin extends Plugin {
   }
 
   private openResultSummary(summary: ExportSummary): void {
-    new MarktlResultModal(this.app, summary, (outputPath, preferredLink) => this.copyShareLink(outputPath, preferredLink)).open();
+    new MarktlResultModal(
+      this.app,
+      summary,
+      (outputPath, preferredLink) => this.copyShareLink(outputPath, preferredLink),
+      (presetId) => {
+        void this.exportActiveNote(this.optionsFromPreset(presetId));
+      },
+    ).open();
+  }
+
+  private optionsFromPreset(presetId: string): Partial<ExportOptions> {
+    const preset = findExportPreset(presetId);
+    if (!preset) {
+      return {};
+    }
+    return {
+      presetId: preset.id,
+      artifactGoal: preset.artifactGoal,
+      artifactType: preset.artifactType,
+      template: preset.template,
+      conversionMode: preset.mode,
+      previewSecurity: preset.previewSecurity,
+    };
   }
 
   async copyShareLink(outputPath: string, preferredLink = ''): Promise<string> {

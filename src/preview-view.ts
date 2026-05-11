@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf } from 'obsidian';
+import { ItemView, Notice, WorkspaceLeaf } from 'obsidian';
 import type { PreviewState } from './types';
 
 export const VIEW_TYPE_MARKTL_PREVIEW = 'marktl-html-preview';
@@ -8,6 +8,7 @@ const emptyState: PreviewState = {
   filePath: '',
   warnings: [],
   trusted: false,
+  previewSecurity: 'sanitized',
 };
 
 export class MarktlPreviewView extends ItemView {
@@ -49,9 +50,17 @@ export class MarktlPreviewView extends ItemView {
 
     const header = container.createDiv({ cls: 'marktl-preview-header' });
     header.createEl('strong', { text: this.state.filePath || 'HTML Preview' });
-    if (this.state.trusted) {
-      header.createSpan({ cls: 'marktl-preview-trusted', text: 'Trusted' });
-    }
+    header.createSpan({
+      cls: this.state.trusted ? 'marktl-preview-trusted' : 'marktl-preview-sanitized',
+      text: this.state.trusted ? 'Trusted interactive' : 'Sanitized static',
+    });
+
+    let frame!: HTMLIFrameElement;
+    const tools = container.createDiv({ cls: 'marktl-preview-tools' });
+    this.addToolButton(tools, 'Copy as prompt', () => this.copyPrompt(frame));
+    this.addToolButton(tools, 'Copy outline', () => this.copyOutline(frame));
+    this.addToolButton(tools, 'Copy section feedback', () => this.copySectionFeedback(frame));
+    this.addToolButton(tools, 'Open generated file', () => this.openGeneratedFile());
 
     for (const warning of this.state.warnings) {
       container.createDiv({ cls: 'marktl-preview-warning', text: warning });
@@ -59,7 +68,7 @@ export class MarktlPreviewView extends ItemView {
 
     const renderQa = container.createDiv({ cls: 'marktl-preview-render-qa', text: 'Render QA: waiting for preview...' });
 
-    const frame = container.createEl('iframe', {
+    frame = container.createEl('iframe', {
       cls: 'marktl-preview-frame',
       attr: {
         sandbox: this.state.trusted ? 'allow-same-origin allow-scripts' : 'allow-same-origin',
@@ -69,6 +78,67 @@ export class MarktlPreviewView extends ItemView {
       this.runRenderQa(frame, renderQa);
     });
     frame.srcdoc = this.state.html;
+  }
+
+  private addToolButton(container: HTMLElement, label: string, onClick: () => void | Promise<void>): void {
+    const button = container.createEl('button', { text: label });
+    button.type = 'button';
+    button.addEventListener('click', () => {
+      void onClick();
+    });
+  }
+
+  private async copyPrompt(frame: HTMLIFrameElement): Promise<void> {
+    const text = this.getFrameText(frame) || this.stripHtml(this.state.html);
+    await navigator.clipboard.writeText([
+      'Use this MarkTL HTML artifact as context for the next iteration.',
+      '',
+      `Artifact: ${this.state.title || this.state.filePath || 'HTML Preview'}`,
+      `Preview security: ${this.state.previewSecurity}`,
+      '',
+      text,
+    ].join('\n'));
+    new Notice('Copied preview prompt.');
+  }
+
+  private async copyOutline(frame: HTMLIFrameElement): Promise<void> {
+    const outline = this.getOutline(frame);
+    if (!outline) {
+      await navigator.clipboard.writeText(this.state.title || this.state.filePath || 'HTML Preview');
+      new Notice('No headings found; copied artifact title.');
+      return;
+    }
+    await navigator.clipboard.writeText(outline);
+    new Notice('Copied preview outline.');
+  }
+
+  private async copySectionFeedback(frame: HTMLIFrameElement): Promise<void> {
+    const section = this.getFirstSection(frame);
+    const fallback = this.getFrameText(frame) || this.stripHtml(this.state.html);
+    await navigator.clipboard.writeText([
+      'Give feedback on this MarkTL HTML artifact section.',
+      '',
+      `Artifact: ${this.state.title || this.state.filePath || 'HTML Preview'}`,
+      `Section: ${section.heading || 'Whole document fallback'}`,
+      '',
+      section.text || fallback,
+      '',
+      'Focus on what should be clearer, more visual, or more interactive.',
+    ].join('\n'));
+    new Notice(section.heading ? 'Copied section feedback prompt.' : 'Copied whole-document feedback prompt.');
+  }
+
+  private openGeneratedFile(): void {
+    if (!this.state.filePath) {
+      new Notice('No generated file path is available.');
+      return;
+    }
+    const adapter = this.app.vault.adapter as typeof this.app.vault.adapter & {
+      getFullPath?: (path: string) => string;
+    };
+    const fullPath = adapter.getFullPath ? adapter.getFullPath(this.state.filePath) : this.state.filePath;
+    const target = fullPath.startsWith('/') ? `file://${encodeURI(fullPath)}` : encodeURI(fullPath);
+    window.open(target, '_blank', 'noopener,noreferrer');
   }
 
   private runRenderQa(frame: HTMLIFrameElement, statusEl: HTMLElement): void {
@@ -108,5 +178,59 @@ export class MarktlPreviewView extends ItemView {
       statusEl.setText('Render QA: preview inspection was blocked by iframe security.');
       statusEl.addClass('marktl-preview-render-qa-warning');
     }
+  }
+
+  private getFrameDocument(frame: HTMLIFrameElement): Document | null {
+    try {
+      return frame.contentDocument;
+    } catch {
+      return null;
+    }
+  }
+
+  private getFrameText(frame: HTMLIFrameElement): string {
+    const doc = this.getFrameDocument(frame);
+    return doc?.body?.innerText?.trim() || '';
+  }
+
+  private getOutline(frame: HTMLIFrameElement): string {
+    const doc = this.getFrameDocument(frame);
+    if (!doc) {
+      return '';
+    }
+    const headings = Array.from(doc.querySelectorAll('h1,h2,h3'));
+    return headings
+      .map((heading) => {
+        const level = Number(heading.tagName.slice(1));
+        return `${'  '.repeat(Math.max(0, level - 1))}- ${heading.textContent?.trim() || 'Untitled'}`;
+      })
+      .join('\n');
+  }
+
+  private getFirstSection(frame: HTMLIFrameElement): { heading: string; text: string } {
+    const doc = this.getFrameDocument(frame);
+    const heading = doc?.querySelector('h2,h1,h3');
+    if (!doc || !heading) {
+      return { heading: '', text: '' };
+    }
+    const parts = [heading.textContent?.trim() || 'Untitled'];
+    let node = heading.nextElementSibling;
+    while (node && !/^H[1-3]$/.test(node.tagName)) {
+      parts.push(node.textContent?.trim() || '');
+      node = node.nextElementSibling;
+    }
+    return {
+      heading: heading.textContent?.trim() || 'Untitled',
+      text: parts.filter(Boolean).join('\n\n'),
+    };
+  }
+
+  private stripHtml(html: string): string {
+    return String(html || '')
+      .replace(/<script\b[\s\S]*?<\/script>/gi, '')
+      .replace(/<style\b[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 }
