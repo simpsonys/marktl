@@ -2407,6 +2407,12 @@ var MarktlSetupModal = class extends import_obsidian6.Modal {
     });
     this.doctorEl = contentEl.createDiv({ cls: "marktl-doctor-box" });
     this.renderDoctorIdle();
+    const agentBox = contentEl.createDiv({ cls: "marktl-agent-setup-box" });
+    agentBox.createEl("h3", { text: "Agent-assisted setup" });
+    agentBox.createEl("p", {
+      text: "If you use Codex or Claude Code, copy a setup prompt and let your coding agent configure BRAT, MarkTL, GitHub Pages, and Giscus with you."
+    });
+    new import_obsidian6.Setting(agentBox).addButton((button) => button.setButtonText("Copy Codex setup prompt").onClick(() => this.copyAgentPrompt("codex"))).addButton((button) => button.setButtonText("Copy Claude setup prompt").onClick(() => this.copyAgentPrompt("claude")));
     new import_obsidian6.Setting(contentEl).addButton((button) => button.setButtonText("Check Claude CLI").onClick(() => {
       void this.runDoctor("claude");
     })).addButton((button) => button.setButtonText("Check Codex CLI").onClick(() => {
@@ -2487,6 +2493,11 @@ var MarktlSetupModal = class extends import_obsidian6.Modal {
     });
     await this.plugin.saveSettings();
   }
+  async copyAgentPrompt(agent) {
+    const prompt = buildAgentSetupPrompt(agent);
+    await navigator.clipboard.writeText(prompt);
+    new import_obsidian6.Notice(`${agent === "codex" ? "Codex" : "Claude"} setup prompt copied.`);
+  }
   renderDoctorIdle() {
     if (!this.doctorEl) {
       return;
@@ -2523,6 +2534,44 @@ var MarktlSetupModal = class extends import_obsidian6.Modal {
     }
   }
 };
+function buildAgentSetupPrompt(agent) {
+  const agentName = agent === "codex" ? "Codex" : "Claude Code";
+  return [
+    `You are helping me set up the MarkTL Obsidian plugin using ${agentName}.`,
+    "",
+    "Goal:",
+    "- Install MarkTL through BRAT from https://github.com/reallygood83/marktl.",
+    "- Configure MarkTL so an Obsidian Markdown note can be exported to a GitHub Pages HTML link.",
+    "- Make the exported page comment-ready with Giscus GitHub comments.",
+    "",
+    "Please guide me step by step. Do not ask for secrets unless needed, and never print my GitHub token back to me.",
+    "",
+    "Target MarkTL settings:",
+    "- Share target: GitHub Pages link",
+    "- Preview/export: Trusted interactive preview",
+    "- Reader feedback: Giscus GitHub comments",
+    "- Copy share link by default: enabled",
+    "- GitHub repository: owner/repo for my Pages repository",
+    "- GitHub branch: main",
+    "- GitHub Pages base URL: https://owner.github.io/repo",
+    "- Publish path: marktl",
+    "- GitHub token: fine-grained token limited to the Pages repo with Contents read/write",
+    "- Giscus repository: owner/repo with Discussions enabled",
+    "- Giscus category: Announcements or General",
+    "- Giscus repo ID and category ID: values from https://giscus.app",
+    "",
+    "Checklist:",
+    "1. Confirm BRAT has installed and enabled MarkTL.",
+    "2. Confirm the Pages repository exists and GitHub Pages is enabled for the target branch.",
+    "3. Confirm the token has Contents read/write only for that repository.",
+    "4. Confirm Giscus is enabled and the repo/category IDs are filled.",
+    "5. Export one test note with GitHub Pages link selected.",
+    "6. Verify the result modal shows a short public link and archive link.",
+    "7. Open the public link and verify the Sign in with GitHub button and Giscus comment box appear.",
+    "",
+    "If anything fails, diagnose the exact missing setting instead of guessing."
+  ].join("\n");
+}
 
 // src/main.ts
 var { convertWithAiFallback } = require_ai();

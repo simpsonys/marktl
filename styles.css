@@ -258,6 +258,23 @@
   margin: 0 0 8px;
 }
 
+.marktl-agent-setup-box {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  margin: 12px 0;
+  padding: 12px;
+}
+
+.marktl-agent-setup-box h3 {
+  margin: 0 0 6px;
+}
+
+.marktl-agent-setup-box p {
+  color: var(--text-muted);
+  margin: 0 0 8px;
+}
+
 .marktl-doctor-box {
   background: var(--background-secondary);
   border: 1px solid var(--background-modifier-border);

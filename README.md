@@ -98,6 +98,38 @@ https://github.com/reallygood83/marktl
 
 5. Enable `MarkTL HTML Exporter` in Obsidian community plugin settings.
 
+### Agent-Assisted Setup With Codex Or Claude Code
+
+Many users install and configure tools by asking Codex or Claude Code to walk them through the process. MarkTL is designed for that workflow.
+
+Open `MarkTL setup` in Obsidian and use:
+
+- `Copy Codex setup prompt`
+- `Copy Claude setup prompt`
+
+Paste the copied prompt into Codex or Claude Code. The agent should help you:
+
+- install MarkTL through BRAT
+- choose Claude Code CLI or Codex CLI as the AI provider
+- configure GitHub Pages publishing
+- configure a fine-grained GitHub token without exposing it in chat
+- configure Giscus comments
+- export one test note
+- verify that the result modal shows a short public link, archive link, and comment status
+- open the published page and check the GitHub sign-in button plus Giscus comment box
+
+Recommended share settings for agent-assisted setup:
+
+```text
+Share target: GitHub Pages link
+Preview/export: Trusted interactive preview
+Reader feedback: Giscus GitHub comments
+Copy share link by default: On
+Publish path: marktl
+```
+
+The agent cannot safely create or reveal your GitHub token for you. Create a fine-grained token yourself, limit it to the Pages repository, and grant only `Contents: Read and write`.
+
 ### How To Use
 
 1. Open a Markdown note in Obsidian.
@@ -361,6 +393,38 @@ https://github.com/reallygood83/marktl
 ```
 
 5. Obsidian community plugin 설정에서 `MarkTL HTML Exporter`를 활성화합니다.
+
+### Codex / Claude Code로 설치와 설정하기
+
+많은 구독자는 직접 설정 화면을 하나씩 만지기보다 Codex나 Claude Code에게 설치와 설정을 맡기는 방식이 더 편합니다. MarkTL은 이 흐름에 맞게 준비되어 있습니다.
+
+Obsidian에서 `MarkTL setup`을 열고 아래 버튼을 사용하세요.
+
+- `Copy Codex setup prompt`
+- `Copy Claude setup prompt`
+
+복사된 프롬프트를 Codex 또는 Claude Code에 붙여넣으면 agent가 아래 과정을 순서대로 도와주도록 설계되어 있습니다.
+
+- BRAT으로 MarkTL 설치
+- Claude Code CLI 또는 Codex CLI provider 선택
+- GitHub Pages publish 설정
+- GitHub token을 채팅에 노출하지 않고 설정
+- Giscus 댓글 설정
+- 테스트 노트 하나 export
+- 결과 모달에서 짧은 공개 링크, 아카이브 링크, 댓글 상태 확인
+- 실제 공개 페이지를 열어 GitHub 로그인 버튼과 Giscus 댓글창 확인
+
+권장 공유 설정:
+
+```text
+Share target: GitHub Pages link
+Preview/export: Trusted interactive preview
+Reader feedback: Giscus GitHub comments
+Copy share link by default: On
+Publish path: marktl
+```
+
+AI agent가 GitHub token을 안전하게 대신 발급하거나 공개해줄 수는 없습니다. token은 사용자가 직접 만들고, Pages repo 하나로 범위를 제한하고, 권한은 `Contents: Read and write`만 주는 것을 권장합니다.
 
 ### 사용 방법
 
