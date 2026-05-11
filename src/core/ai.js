@@ -8,7 +8,12 @@ const { convertMarkdownToHtml } = require('./converter.js');
 const { looksLikeHtmlDocument, sanitizeHtml } = require('./sanitizer.js');
 
 const providerCommands = {
-  claude: { command: 'claude', args: ['-p'], promptAsArgument: true },
+  claude: {
+    command: 'claude',
+    args: ['-p'],
+    promptAsArgument: true,
+    unsetEnv: ['ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY'],
+  },
   codex: { command: 'codex', args: ['exec', '--json', '--sandbox', 'read-only', '-'], parser: 'codex-json', promptAsArgument: false },
 };
 
@@ -70,10 +75,7 @@ async function runCliProvider(markdown, options = {}) {
   const execOptions = {
     timeout,
     maxBuffer: 10 * 1024 * 1024,
-    env: {
-      ...process.env,
-      PATH: mergePath(process.env.PATH),
-    },
+    env: buildProviderEnv(provider),
     shell: process.platform === 'win32',
   };
   if (!provider.promptAsArgument) {
@@ -100,6 +102,17 @@ async function runCliProvider(markdown, options = {}) {
       .join('\n');
     throw new Error(details || String(error));
   }
+}
+
+function buildProviderEnv(provider, baseEnv = process.env) {
+  const env = {
+    ...baseEnv,
+    PATH: mergePath(baseEnv.PATH, { env: baseEnv }),
+  };
+  for (const key of provider.unsetEnv || []) {
+    delete env[key];
+  }
+  return env;
 }
 
 function runProcess(command, args, options) {

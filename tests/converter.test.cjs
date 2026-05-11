@@ -216,6 +216,46 @@ test('provider process uses shell mode when requested for Windows CLI shims', as
   assert.equal(captured.shell, process.platform === 'win32');
 });
 
+test('claude provider clears Anthropic environment overrides before spawning', async () => {
+  let captured = null;
+  const previous = {
+    ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL,
+    ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  };
+  process.env.ANTHROPIC_BASE_URL = 'https://example.invalid';
+  process.env.ANTHROPIC_AUTH_TOKEN = 'stale-token';
+  process.env.ANTHROPIC_API_KEY = 'stale-key';
+
+  try {
+    await assert.rejects(
+      () => runCliProvider('# Prompt', {
+        provider: 'claude',
+        timeoutMs: 1,
+        cliPaths: { claude: 'claude' },
+        runProcess: (command, args, options) => {
+          captured = { command, args, env: options.env };
+          throw new Error('stop');
+        },
+      }),
+      /stop/,
+    );
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+
+  assert.equal(captured.env.ANTHROPIC_BASE_URL, undefined);
+  assert.equal(captured.env.ANTHROPIC_AUTH_TOKEN, undefined);
+  assert.equal(captured.env.ANTHROPIC_API_KEY, undefined);
+  assert.equal(typeof captured.env.PATH, 'string');
+});
+
 test('AI prompt can be passed as a provider argument', () => {
   const prompt = buildPrompt('# Arg Mode', {
     mode: 'preserve',
