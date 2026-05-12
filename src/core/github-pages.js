@@ -207,11 +207,11 @@ applyFilters();
 
 function normalizeTags(tags) {
   const values = Array.isArray(tags) ? tags : String(tags || '').split(',');
-  return values
+  return [...new Set(values
     .map((tag) => cleanArchiveText(String(tag || '').replace(/^-\s*/, '').replace(/^#/, '').trim(), ''))
     .filter(Boolean)
     .filter((tag) => !looksLikeMojibake(tag))
-    .map((tag) => tag.length > 44 ? `${tag.slice(0, 41)}...` : tag)
+    .map((tag) => tag.length > 44 ? `${tag.slice(0, 41)}...` : tag))]
     .slice(0, 8);
 }
 
@@ -221,6 +221,7 @@ function cleanArchiveText(value, fallback = '') {
     .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
     .replace(/<iframe\b[\s\S]*?<\/iframe>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
+    .replace(/<[^>]*$/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   if (!cleaned || looksLikeMojibake(cleaned)) {

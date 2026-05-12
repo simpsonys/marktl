@@ -1448,10 +1448,10 @@ applyFilters();
     }
     function normalizeTags(tags) {
       const values = Array.isArray(tags) ? tags : String(tags || "").split(",");
-      return values.map((tag) => cleanArchiveText(String(tag || "").replace(/^-\s*/, "").replace(/^#/, "").trim(), "")).filter(Boolean).filter((tag) => !looksLikeMojibake(tag)).map((tag) => tag.length > 44 ? `${tag.slice(0, 41)}...` : tag).slice(0, 8);
+      return [...new Set(values.map((tag) => cleanArchiveText(String(tag || "").replace(/^-\s*/, "").replace(/^#/, "").trim(), "")).filter(Boolean).filter((tag) => !looksLikeMojibake(tag)).map((tag) => tag.length > 44 ? `${tag.slice(0, 41)}...` : tag))].slice(0, 8);
     }
     function cleanArchiveText(value, fallback = "") {
-      const cleaned = String(value || "").replace(/<script\b[\s\S]*?<\/script>/gi, " ").replace(/<style\b[\s\S]*?<\/style>/gi, " ").replace(/<iframe\b[\s\S]*?<\/iframe>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      const cleaned = String(value || "").replace(/<script\b[\s\S]*?<\/script>/gi, " ").replace(/<style\b[\s\S]*?<\/style>/gi, " ").replace(/<iframe\b[\s\S]*?<\/iframe>/gi, " ").replace(/<[^>]+>/g, " ").replace(/<[^>]*$/g, " ").replace(/\s+/g, " ").trim();
       if (!cleaned || looksLikeMojibake(cleaned)) {
         return fallback;
       }
