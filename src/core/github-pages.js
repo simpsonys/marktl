@@ -108,7 +108,7 @@ function updateShareIndex(existingIndex, entry) {
 }
 
 function renderShareIndexHtml(index, options = {}) {
-  const title = options.title || 'MarkTL Shared HTML';
+  const title = options.title || 'YSDA Publisher Shared HTML';
   const baseUrl = String(options.baseUrl || '').replace(/\/+$/g, '');
   const items = Array.isArray(index?.items) ? index.items : [];
   const tagCounts = new Map();
@@ -170,7 +170,7 @@ h1{font-size:clamp(34px,6vw,72px);line-height:.98;margin:0;overflow-wrap:anywher
 </style>
 </head>
 <body><main>
-<section class="hero"><div class="eyebrow">MarkTL Archive</div><h1>${escapeHtml(title)}</h1><p class="meta"><span id="count">${items.length}</span> published document(s). Search, filter, and open any shared HTML artifact.</p></section>
+<section class="hero"><div class="eyebrow">YSDA Publisher Archive</div><h1>${escapeHtml(title)}</h1><p class="meta"><span id="count">${items.length}</span> published document(s). Search, filter, and open any shared HTML artifact.</p></section>
 <section class="toolbar" aria-label="Archive controls"><input id="search" type="search" placeholder="Search documents, tags, sources..." aria-label="Search documents"><div class="tagbar"><button type="button" data-tag="">All</button>${tagButtons}</div></section>
 <section class="grid" id="items">${list || '<p class="empty">No published documents yet.</p>'}</section>
 </main>

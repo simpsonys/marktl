@@ -91,7 +91,7 @@ export class MarktlPreviewView extends ItemView {
   private async copyPrompt(frame: HTMLIFrameElement): Promise<void> {
     const text = this.getFrameText(frame) || this.stripHtml(this.state.html);
     await navigator.clipboard.writeText([
-      'Use this MarkTL HTML artifact as context for the next iteration.',
+      'Use this YSDA Publisher HTML artifact as context for the next iteration.',
       '',
       `Artifact: ${this.state.title || this.state.filePath || 'HTML Preview'}`,
       `Preview security: ${this.state.previewSecurity}`,
@@ -116,7 +116,7 @@ export class MarktlPreviewView extends ItemView {
     const section = this.getFirstSection(frame);
     const fallback = this.getFrameText(frame) || this.stripHtml(this.state.html);
     await navigator.clipboard.writeText([
-      'Give feedback on this MarkTL HTML artifact section.',
+      'Give feedback on this YSDA Publisher HTML artifact section.',
       '',
       `Artifact: ${this.state.title || this.state.filePath || 'HTML Preview'}`,
       `Section: ${section.heading || 'Whole document fallback'}`,

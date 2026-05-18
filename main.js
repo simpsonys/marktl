@@ -259,6 +259,30 @@ var require_templates = __commonJS({
     var { escapeHtml } = require_html();
     var templates = [
       {
+        id: "ysda-web-book",
+        name: "YSDA Web Book",
+        description: "Readable Korean/English mixed study-note style for reviewed web-book pages.",
+        css: `
+      body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1e293b; background: #f5f7fb; }
+      main { max-width: 980px; margin: 0 auto; padding: 44px 24px 72px; box-sizing: border-box; }
+      article { background: #ffffff; border: 1px solid #d8dee8; border-radius: 8px; padding: 32px; }
+      h1, h2, h3 { color: #0f172a; line-height: 1.2; }
+      h1 { font-size: 42px; margin-top: 0; }
+      h2 { margin-top: 36px; padding-top: 18px; border-top: 1px solid #e2e8f0; }
+      p, li { line-height: 1.72; }
+      a { color: #0f766e; }
+      code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      pre { overflow: auto; padding: 16px; background: #111827; color: #f9fafb; border-radius: 8px; }
+      table { width: 100%; border-collapse: collapse; margin: 18px 0; }
+      th, td { border: 1px solid #d8dee8; padding: 8px 10px; text-align: left; }
+      img { max-width: 100%; height: auto; border-radius: 6px; }
+      .frontmatter { white-space: pre-wrap; border: 1px solid #d8dee8; background: #f8fafc; padding: 14px; border-radius: 8px; color: #475569; }
+      .callout { border-left: 4px solid #0f766e; background: #ecfdf5; padding: 12px 16px; margin: 18px 0; border-radius: 6px; }
+      .callout-title { font-weight: 700; margin-bottom: 6px; }
+      @media (max-width: 720px) { main { padding: 24px 14px 56px; } article { padding: 20px; } h1 { font-size: 34px; } }
+    `
+      },
+      {
         id: "minimal",
         name: "Minimal",
         description: "Clean readable document styling for faithful note exports.",
@@ -552,7 +576,7 @@ var require_templates = __commonJS({
       return templates.map(({ id, name, description }) => ({ id, name, description }));
     }
     function getTemplate(id) {
-      return templates.find((template) => template.id === id) || templates[0];
+      return templates.find((template) => template.id === id) || templates.find((template) => template.id === "minimal") || templates[0];
     }
     function wrapWithTemplate(bodyHtml, options = {}) {
       const template = getTemplate(options.template);
@@ -593,7 +617,7 @@ var require_converter = __commonJS({
     var { escapeHtml } = require_html();
     var { sanitizeHtml } = require_sanitizer();
     var { wrapWithTemplate } = require_templates();
-    function convertMarkdownToHtml(markdown, options = {}) {
+    function convertMarkdownToHtml2(markdown, options = {}) {
       const parsed = splitFrontmatter(markdown);
       const bodyHtml = blocksToHtml(parsed.body, options);
       const frontmatterHtml = parsed.frontmatter ? `<pre class="frontmatter">${escapeHtml(parsed.frontmatter)}</pre>
@@ -758,7 +782,7 @@ var require_converter = __commonJS({
       }).replace(/\[([^\]]+)]\(([^)]+)\)/g, (_match, label, href) => `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/\*([^*]+)\*/g, "<em>$1</em>").replace(/`([^`]+)`/g, "<code>$1</code>");
     }
     module2.exports = {
-      convertMarkdownToHtml,
+      convertMarkdownToHtml: convertMarkdownToHtml2,
       inferTitle,
       splitFrontmatter
     };
@@ -775,7 +799,7 @@ var require_ai = __commonJS({
     var path = require("node:path");
     var { buildAiAssetInstruction } = require_assets();
     var { getArtifactGoalInstruction } = require_artifact_goals();
-    var { convertMarkdownToHtml } = require_converter();
+    var { convertMarkdownToHtml: convertMarkdownToHtml2 } = require_converter();
     var { looksLikeHtmlDocument, sanitizeHtml } = require_sanitizer();
     var providerCommands = {
       claude: {
@@ -797,7 +821,7 @@ var require_ai = __commonJS({
     async function convertWithAiFallback2(markdown, options = {}) {
       if (!options.provider || options.provider === "none") {
         return {
-          html: convertMarkdownToHtml(markdown, options),
+          html: convertMarkdownToHtml2(markdown, options),
           usedFallback: true,
           warnings: ["AI provider is disabled; used local conversion."]
         };
@@ -818,7 +842,7 @@ var require_ai = __commonJS({
           throw error;
         }
         return {
-          html: convertMarkdownToHtml(markdown, options),
+          html: convertMarkdownToHtml2(markdown, options),
           usedFallback: true,
           warnings: [`AI conversion failed: ${error.message}. Used local fallback.`]
         };
@@ -1354,7 +1378,7 @@ var require_github_pages = __commonJS({
       };
     }
     function renderShareIndexHtml2(index, options = {}) {
-      const title = options.title || "MarkTL Shared HTML";
+      const title = options.title || "YSDA Publisher Shared HTML";
       const baseUrl = String(options.baseUrl || "").replace(/\/+$/g, "");
       const items = Array.isArray(index == null ? void 0 : index.items) ? index.items : [];
       const tagCounts = /* @__PURE__ */ new Map();
@@ -1412,7 +1436,7 @@ h1{font-size:clamp(34px,6vw,72px);line-height:.98;margin:0;overflow-wrap:anywher
 </style>
 </head>
 <body><main>
-<section class="hero"><div class="eyebrow">MarkTL Archive</div><h1>${escapeHtml(title)}</h1><p class="meta"><span id="count">${items.length}</span> published document(s). Search, filter, and open any shared HTML artifact.</p></section>
+<section class="hero"><div class="eyebrow">YSDA Publisher Archive</div><h1>${escapeHtml(title)}</h1><p class="meta"><span id="count">${items.length}</span> published document(s). Search, filter, and open any shared HTML artifact.</p></section>
 <section class="toolbar" aria-label="Archive controls"><input id="search" type="search" placeholder="Search documents, tags, sources..." aria-label="Search documents"><div class="tagbar"><button type="button" data-tag="">All</button>${tagButtons}</div></section>
 <section class="grid" id="items">${list || '<p class="empty">No published documents yet.</p>'}</section>
 </main>
@@ -1521,27 +1545,27 @@ var require_setup_guidance = __commonJS({
       const repo = String(settings.githubRepo || "owner/repo").trim() || "owner/repo";
       const branch = String(settings.githubBranch || "main").trim() || "main";
       const baseUrl = String(settings.githubPagesBaseUrl || "").trim() || "https://owner.github.io/repo";
-      const publishPath = String(settings.githubPublishPath || "marktl").trim() || "marktl";
+      const publishPath = String(settings.githubPublishPath || "ysda-publisher").trim() || "ysda-publisher";
       return [
-        "MarkTL GitHub Pages setup checklist",
+        "YSDA Publisher GitHub Pages setup checklist",
         "",
         `1. GitHub repository: ${repo}`,
         `2. Enable GitHub Pages for branch "${branch}" in GitHub repository Settings > Pages.`,
-        "3. Pages source should publish from the same branch/folder that receives MarkTL files.",
+        "3. Pages source should publish from the same branch/folder that receives YSDA Publisher files.",
         `4. GitHub Pages base URL: ${baseUrl}`,
         `5. Publish path: ${publishPath}`,
         `6. Expected export URL: ${baseUrl.replace(/\/+$/g, "")}/${publishPath.replace(/^\/+|\/+$/g, "")}/<slug>/`,
         "7. Open https://github.com/settings/personal-access-tokens/new and create a fine-grained token.",
         `8. Limit repository access to ${repo}.`,
         "9. Grant Contents read/write permission. No broader permissions are required for publishing files.",
-        "10. Paste the token into MarkTL settings, then export one test note with Share target = GitHub Pages link."
+        "10. Paste the token into YSDA Publisher settings, then export one test note with Share target = GitHub Pages link."
       ].join("\n");
     }
     function buildGiscusSetupChecklist2(settings = {}) {
       const repo = String(settings.giscusRepo || settings.githubRepo || "owner/repo").trim() || "owner/repo";
       const category = String(settings.giscusCategory || "Announcements").trim() || "Announcements";
       return [
-        "MarkTL Giscus setup checklist",
+        "YSDA Publisher Giscus setup checklist",
         "",
         `1. Use repository: ${repo}`,
         "2. Install the Giscus GitHub App from https://github.com/apps/giscus for this repository.",
@@ -1552,7 +1576,7 @@ var require_setup_guidance = __commonJS({
         "7. Choose mapping: pathname",
         "8. Choose theme: preferred_color_scheme",
         "9. Copy data-repo-id and data-category-id from the generated Giscus script.",
-        "10. Paste those IDs into MarkTL settings.",
+        "10. Paste those IDs into YSDA Publisher settings.",
         "11. Export with Preview/export = Trusted interactive preview and Reader feedback = Giscus GitHub comments."
       ].join("\n");
     }
@@ -1892,6 +1916,190 @@ var require_html_qa = __commonJS({
   }
 });
 
+// src/core/publishManifest.js
+var require_publishManifest = __commonJS({
+  "src/core/publishManifest.js"(exports2, module2) {
+    "use strict";
+    function buildPublishManifest2(input) {
+      const skipped = Array.isArray(input.skipped) ? input.skipped : [];
+      const pages = Array.isArray(input.pages) ? input.pages : [];
+      return {
+        tool: "YSDA Publisher",
+        generatedAt: input.generatedAt,
+        sourceFolder: input.sourceFolder,
+        outputFolder: input.outputFolder,
+        exportedCount: pages.length,
+        skippedCount: skipped.filter((item) => item.status !== "blocked").length,
+        blockedCount: skipped.filter((item) => item.status === "blocked").length,
+        pages,
+        skipped,
+        warnings: Array.isArray(input.warnings) ? input.warnings : []
+      };
+    }
+    module2.exports = {
+      buildPublishManifest: buildPublishManifest2
+    };
+  }
+});
+
+// src/core/publishSafety.js
+var require_publishSafety = __commonJS({
+  "src/core/publishSafety.js"(exports2, module2) {
+    "use strict";
+    var { extractMarkdownImageReferences: extractMarkdownImageReferences2 } = require_assets();
+    var { inferTitle, splitFrontmatter } = require_converter();
+    var DEFAULT_MARKERS = [
+      "CONFIDENTIAL",
+      "INTERNAL ONLY",
+      "DO NOT PUBLISH",
+      "\uBE44\uACF5\uAC1C",
+      "\uB300\uC678\uBE44"
+    ];
+    function evaluatePublishSafety2(markdown, options = {}) {
+      const sourcePath = options.sourcePath || "";
+      const parsed = splitFrontmatter(markdown);
+      const frontmatter = parseFrontmatter(parsed.frontmatter);
+      const metadata = buildMetadata(frontmatter, parsed.body, sourcePath, options);
+      const reasons = [];
+      const warnings = [];
+      if (frontmatter.publish !== true) {
+        reasons.push("Missing publish: true frontmatter.");
+      }
+      if (metadata.visibility !== "public-safe") {
+        reasons.push(`Visibility is ${metadata.visibility}; public web-book export requires visibility: public-safe.`);
+      }
+      if (options.requireReviewedForPublicSafe !== false && metadata.visibility === "public-safe" && frontmatter.reviewed !== true) {
+        reasons.push("Public-safe notes require reviewed: true.");
+      }
+      const text = String(markdown || "");
+      for (const term of uniqueStrings([...options.blockedTerms || [], ...DEFAULT_MARKERS])) {
+        if (term && text.toLowerCase().includes(term.toLowerCase())) {
+          reasons.push(`Blocked term found: ${term}`);
+        }
+      }
+      for (const fragment of uniqueStrings(options.blockedUrlFragments || [])) {
+        if (fragment && text.toLowerCase().includes(fragment.toLowerCase())) {
+          reasons.push(`Blocked URL/domain fragment found: ${fragment}`);
+        }
+      }
+      for (const pattern of findInternalLookingUrls(text)) {
+        reasons.push(`Internal-looking URL found: ${pattern}`);
+      }
+      if (/<script\b/i.test(text) || /<iframe\b/i.test(text)) {
+        reasons.push("Raw script or iframe HTML is not allowed in public-safe folder export.");
+      }
+      if (/on\w+\s*=/i.test(text) || /javascript:/i.test(text)) {
+        reasons.push("Inline event handlers or javascript: URLs are not allowed in public-safe folder export.");
+      }
+      const localImages = extractMarkdownImageReferences2(text).map((reference) => reference.target);
+      if (localImages.length > 0) {
+        warnings.push(`Local image references must be bundled: ${localImages.join(", ")}`);
+      }
+      const blocked = reasons.some((reason) => /Blocked|Internal-looking|script|iframe|javascript|event handlers/i.test(reason));
+      const allowed = reasons.length === 0;
+      return {
+        allowed,
+        status: allowed ? "included" : blocked ? "blocked" : "skipped",
+        reasons,
+        warnings,
+        metadata,
+        body: parsed.body,
+        frontmatter
+      };
+    }
+    function parseFrontmatter(frontmatterText) {
+      const result = {};
+      const lines = String(frontmatterText || "").replace(/\r\n/g, "\n").split("\n");
+      let activeKey = "";
+      for (const line of lines) {
+        if (!line.trim() || /^\s*#/.test(line)) {
+          continue;
+        }
+        const listItem = /^\s*-\s*(.+?)\s*$/.exec(line);
+        if (listItem && activeKey) {
+          result[activeKey] = Array.isArray(result[activeKey]) ? result[activeKey] : [];
+          result[activeKey].push(cleanScalar(listItem[1]));
+          continue;
+        }
+        const match = /^([A-Za-z0-9_-]+):\s*(.*?)\s*$/.exec(line);
+        if (!match) {
+          activeKey = "";
+          continue;
+        }
+        activeKey = match[1];
+        result[activeKey] = parseScalar(match[2]);
+      }
+      return result;
+    }
+    function buildMetadata(frontmatter, body, sourcePath, options) {
+      const visibility = stringValue(frontmatter.visibility) || options.defaultVisibility || "internal-draft";
+      const tags = arrayValue(frontmatter.tags).map((tag) => tag.replace(/^#/, "").trim()).filter(Boolean);
+      const title = stringValue(frontmatter.title) || inferTitle(body, sourcePath);
+      const summary = stringValue(frontmatter.summary) || buildSummary(body);
+      return {
+        title,
+        visibility,
+        reviewed: frontmatter.reviewed === true,
+        tags,
+        summary
+      };
+    }
+    function parseScalar(value) {
+      const trimmed = String(value || "").trim();
+      if (!trimmed) {
+        return "";
+      }
+      if (/^(true|yes)$/i.test(trimmed)) {
+        return true;
+      }
+      if (/^(false|no)$/i.test(trimmed)) {
+        return false;
+      }
+      if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+        return trimmed.slice(1, -1).split(",").map(cleanScalar).filter(Boolean);
+      }
+      return cleanScalar(trimmed);
+    }
+    function cleanScalar(value) {
+      return String(value || "").trim().replace(/^["']|["']$/g, "");
+    }
+    function stringValue(value) {
+      return typeof value === "string" ? value.trim() : "";
+    }
+    function arrayValue(value) {
+      if (Array.isArray(value)) {
+        return value.map((item) => String(item || "").trim());
+      }
+      if (typeof value === "string" && value.trim()) {
+        return [value.trim()];
+      }
+      return [];
+    }
+    function buildSummary(markdown) {
+      return String(markdown || "").replace(/^#\s+.+$/m, "").replace(/```[\s\S]*?```/g, "").replace(/!\[\[[^\]]+]]/g, "").replace(/!\[[^\]]*]\([^)]+\)/g, "").replace(/\[[^\]]+]\([^)]+\)/g, "$1").replace(/[#*_`>~-]/g, "").split("\n").map((line) => line.trim()).filter(Boolean).join(" ").slice(0, 220);
+    }
+    function findInternalLookingUrls(text) {
+      const findings = [];
+      const urlPattern = /\bhttps?:\/\/[^\s)>"']+/gi;
+      for (const match of String(text || "").matchAll(urlPattern)) {
+        const url = match[0];
+        if (/\/\/(?:localhost|127\.0\.0\.1|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[0-1])\.|[^/\s]+(?:\.local|\.internal))(?:[:/]|$)/i.test(url)) {
+          findings.push(url);
+        }
+      }
+      return findings;
+    }
+    function uniqueStrings(values) {
+      return [...new Set((values || []).map((value) => String(value || "").trim()).filter(Boolean))];
+    }
+    module2.exports = {
+      buildSummary,
+      evaluatePublishSafety: evaluatePublishSafety2,
+      parseFrontmatter
+    };
+  }
+});
+
 // src/core/settings.js
 var require_settings = __commonJS({
   "src/core/settings.js"(exports2, module2) {
@@ -1931,6 +2139,28 @@ var require_settings = __commonJS({
   }
 });
 
+// src/core/searchIndex.js
+var require_searchIndex = __commonJS({
+  "src/core/searchIndex.js"(exports2, module2) {
+    "use strict";
+    var { buildSummary } = require_publishSafety();
+    function buildSearchEntry2(page, markdown) {
+      return {
+        title: String(page.title || ""),
+        url: String(page.url || ""),
+        sourcePath: String(page.sourcePath || ""),
+        summary: String(page.summary || buildSummary(markdown)),
+        tags: Array.isArray(page.tags) ? page.tags : [],
+        visibility: String(page.visibility || "public-safe"),
+        updatedAt: String(page.updatedAt || "")
+      };
+    }
+    module2.exports = {
+      buildSearchEntry: buildSearchEntry2
+    };
+  }
+});
+
 // src/core/social.js
 var require_social = __commonJS({
   "src/core/social.js"(exports2, module2) {
@@ -1945,8 +2175,8 @@ var require_social = __commonJS({
       return Math.abs(hash >>> 0).toString(36).slice(0, 7) || "doc";
     }
     function injectSocialMeta2(html, options = {}) {
-      const title = options.title || "MarkTL HTML artifact";
-      const description = options.description || "A shared HTML document generated with MarkTL.";
+      const title = options.title || "YSDA Publisher HTML artifact";
+      const description = options.description || "A shared HTML document generated with YSDA Publisher.";
       const url = options.url || "";
       const image = options.image || "";
       const tags = [
@@ -1975,6 +2205,233 @@ ${value}`;
     module2.exports = {
       buildShortId: buildShortId2,
       injectSocialMeta: injectSocialMeta2
+    };
+  }
+});
+
+// src/templates/ysdaWebBook.js
+var require_ysdaWebBook = __commonJS({
+  "src/templates/ysdaWebBook.js"(exports2, module2) {
+    "use strict";
+    var { escapeHtml, slugify: slugify2 } = require_html();
+    function renderWebBookPage2(input) {
+      const article = addHeadingAnchors(String(input.articleHtml || ""));
+      const toc = buildToc(article.headings);
+      const tags = renderTags(input.tags);
+      const previous = input.previous ? `<a class="nav-link" href="../${escapeHtml(input.previous.slug)}/">Previous<br><strong>${escapeHtml(input.previous.title)}</strong></a>` : "<span></span>";
+      const next = input.next ? `<a class="nav-link" href="../${escapeHtml(input.next.slug)}/">Next<br><strong>${escapeHtml(input.next.title)}</strong></a>` : "<span></span>";
+      return `<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(input.title)} - ${escapeHtml(input.siteTitle || "YSDA Publisher")}</title>
+<style>${pageCss()}</style>
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="../../">${escapeHtml(input.siteTitle || "YSDA Publisher")}</a>
+  <span>${escapeHtml(input.visibility || "public-safe")}</span>
+</header>
+<main>
+  <section class="page-hero">
+    <p class="eyebrow">${escapeHtml(input.sourcePath || "")}</p>
+    <h1>${escapeHtml(input.title || "Untitled")}</h1>
+    <div class="meta">
+      <span>Generated ${escapeHtml(formatDate(input.generatedAt))}</span>
+      <span>Updated ${escapeHtml(formatDate(input.updatedAt))}</span>
+      <span>${escapeHtml(String(input.readingTimeMinutes || 1))} min read</span>
+    </div>
+    ${tags}
+  </section>
+  ${toc}
+  <article class="content">
+${article.html}
+  </article>
+  <nav class="page-nav">${previous}${next}</nav>
+</main>
+<footer>Generated by YSDA Publisher</footer>
+</body>
+</html>`;
+    }
+    function renderWebBookIndex2(input) {
+      const pages = Array.isArray(input.pages) ? input.pages : [];
+      const skipped = Array.isArray(input.skipped) ? input.skipped : [];
+      const blocked = skipped.filter((item) => item.status === "blocked").length;
+      const skippedOnly = skipped.length - blocked;
+      const cards = pages.map((page) => `<a class="page-card" href="${escapeHtml(page.url)}">
+    <span class="source">${escapeHtml(page.sourcePath)}</span>
+    <strong>${escapeHtml(page.title)}</strong>
+    <p>${escapeHtml(page.summary || "")}</p>
+    <span class="card-meta">${escapeHtml((page.tags || []).join(", "))}${page.readingTimeMinutes ? ` \xB7 ${escapeHtml(String(page.readingTimeMinutes))} min` : ""}</span>
+  </a>`).join("\n");
+      return `<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(input.siteTitle || "YSDA Publisher")}</title>
+<style>${indexCss()}</style>
+</head>
+<body>
+<main>
+  <header class="index-hero">
+    <p class="eyebrow">Static web book</p>
+    <h1>${escapeHtml(input.siteTitle || "YSDA Publisher")}</h1>
+    <p>${escapeHtml(input.siteDescription || "")}</p>
+    <div class="summary">
+      <span>${pages.length} exported</span>
+      <span>${skippedOnly} skipped</span>
+      <span>${blocked} blocked</span>
+      <span>Generated ${escapeHtml(formatDate(input.generatedAt))}</span>
+    </div>
+  </header>
+  <section class="tools">
+    <input id="filter" type="search" placeholder="Filter notes" aria-label="Filter notes">
+    <a href="safety-report.html">Safety report</a>
+    <a href="publish-manifest.json">Manifest</a>
+  </section>
+  <section class="grid" id="pages">
+    ${cards || "<p>No notes were exported.</p>"}
+  </section>
+</main>
+<footer>Generated by YSDA Publisher</footer>
+<script>
+const input = document.getElementById('filter');
+const cards = [...document.querySelectorAll('.page-card')];
+input?.addEventListener('input', () => {
+  const query = input.value.trim().toLowerCase();
+  cards.forEach((card) => {
+    card.hidden = query && !card.innerText.toLowerCase().includes(query);
+  });
+});
+</script>
+</body>
+</html>`;
+    }
+    function renderSafetyReport2(report, options = {}) {
+      const pages = Array.isArray(report.pages) ? report.pages : [];
+      const skipped = Array.isArray(report.skipped) ? report.skipped : [];
+      const rows = skipped.map((item) => `<tr>
+    <td>${escapeHtml(item.status || "skipped")}</td>
+    <td>${escapeHtml(item.sourcePath || "")}</td>
+    <td>${escapeHtml((item.reasons || []).join("; "))}</td>
+  </tr>`).join("\n");
+      return `<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Safety report - ${escapeHtml(options.siteTitle || "YSDA Publisher")}</title>
+<style>${indexCss()} table{width:100%;border-collapse:collapse;background:#fff}th,td{border-bottom:1px solid #d8dee8;padding:10px;text-align:left;vertical-align:top}</style>
+</head>
+<body>
+<main>
+  <header class="index-hero">
+    <p class="eyebrow">Safety gate</p>
+    <h1>Safety report</h1>
+    <p>Generated ${escapeHtml(formatDate(report.generatedAt))} from ${escapeHtml(report.sourceFolder || "")}</p>
+    <div class="summary">
+      <span>${pages.length} exported</span>
+      <span>${skipped.filter((item) => item.status !== "blocked").length} skipped</span>
+      <span>${skipped.filter((item) => item.status === "blocked").length} blocked</span>
+    </div>
+  </header>
+  <p><a href="index.html">Back to index</a></p>
+  <table>
+    <thead><tr><th>Status</th><th>Source</th><th>Reason</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="3">All scanned notes passed the safety gate.</td></tr>'}</tbody>
+  </table>
+</main>
+<footer>Generated by YSDA Publisher</footer>
+</body>
+</html>`;
+    }
+    function addHeadingAnchors(html) {
+      const used = /* @__PURE__ */ new Map();
+      const headings = [];
+      const updated = String(html || "").replace(/<h([2-4])>([\s\S]*?)<\/h\1>/gi, (match, level, content) => {
+        const text = stripTags(content).trim();
+        const base = slugify2(text);
+        const count = used.get(base) || 0;
+        used.set(base, count + 1);
+        const id = count ? `${base}-${count + 1}` : base;
+        headings.push({ level: Number(level), text, id });
+        return `<h${level} id="${escapeHtml(id)}">${content}</h${level}>`;
+      });
+      return { html: updated, headings };
+    }
+    function buildToc(headings) {
+      if (!headings.length) {
+        return "";
+      }
+      return `<nav class="toc" aria-label="Table of contents">
+    <strong>Contents</strong>
+    ${headings.map((heading) => `<a class="toc-l${heading.level}" href="#${escapeHtml(heading.id)}">${escapeHtml(heading.text)}</a>`).join("")}
+  </nav>`;
+    }
+    function renderTags(tags) {
+      const values = Array.isArray(tags) ? tags.filter(Boolean) : [];
+      if (!values.length) {
+        return "";
+      }
+      return `<div class="tags">${values.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>`;
+    }
+    function stripTags(value) {
+      return String(value || "").replace(/<[^>]+>/g, "");
+    }
+    function formatDate(value) {
+      if (!value) {
+        return "";
+      }
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return String(value);
+      }
+      return date.toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+    }
+    function pageCss() {
+      return `
+body{margin:0;background:#f5f7fb;color:#1e293b;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.site-header{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:14px 22px;border-bottom:1px solid #d8dee8;background:#fff;position:sticky;top:0;z-index:2}
+.brand{font-weight:800;color:#0f172a;text-decoration:none}
+main{max-width:1040px;margin:0 auto;padding:36px 22px 60px}
+.page-hero{padding:20px 0 28px;border-bottom:1px solid #d8dee8}
+.eyebrow,.source,.card-meta{color:#64748b;font-size:13px}
+h1{font-size:clamp(32px,5vw,52px);line-height:1.08;margin:10px 0 14px;color:#0f172a}
+.meta,.tags{display:flex;flex-wrap:wrap;gap:8px 14px;color:#475569;font-size:14px}
+.tags span{border:1px solid #cbd5e1;background:#fff;padding:4px 8px;border-radius:999px}
+.toc{display:flex;flex-wrap:wrap;gap:8px 14px;margin:22px 0;padding:14px 0;border-bottom:1px solid #d8dee8}
+.toc strong{margin-right:8px}.toc a{color:#0f766e;text-decoration:none}.toc-l3{padding-left:10px}.toc-l4{padding-left:20px}
+.content{background:#fff;border:1px solid #d8dee8;border-radius:8px;padding:28px;overflow-wrap:anywhere}
+.content h1,.content h2,.content h3{color:#0f172a;line-height:1.2}.content h2{margin-top:36px;padding-top:16px;border-top:1px solid #e2e8f0}
+.content p,.content li{line-height:1.72}.content pre{overflow:auto;background:#111827;color:#f9fafb;padding:16px;border-radius:8px}.content code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.content table{width:100%;border-collapse:collapse;margin:18px 0}.content th,.content td{border:1px solid #d8dee8;padding:8px 10px;text-align:left}.content img{max-width:100%;height:auto;border-radius:6px}
+.callout{border-left:4px solid #0f766e;background:#ecfdf5;padding:12px 16px;margin:18px 0;border-radius:6px}.callout-title{font-weight:700}
+.page-nav{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:22px}.nav-link{display:block;border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:14px;color:#0f766e;text-decoration:none}
+footer{text-align:center;color:#64748b;padding:26px}
+@media(max-width:720px){main{padding:24px 14px}.content{padding:18px}.page-nav{grid-template-columns:1fr}.site-header{align-items:flex-start;flex-direction:column}}
+`;
+    }
+    function indexCss() {
+      return `
+body{margin:0;background:#f5f7fb;color:#1e293b;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:1120px;margin:0 auto;padding:42px 22px 64px}
+.index-hero{padding:8px 0 28px;border-bottom:1px solid #d8dee8}
+.eyebrow,.source,.card-meta{color:#64748b;font-size:13px}
+h1{font-size:clamp(34px,6vw,60px);line-height:1.05;margin:8px 0 14px;color:#0f172a}
+.index-hero p{max-width:760px;line-height:1.65}.summary,.tools{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.summary span,.tools a{border:1px solid #cbd5e1;background:#fff;border-radius:999px;padding:7px 10px;color:#334155;text-decoration:none}
+.tools{align-items:center;margin:22px 0}.tools input{min-width:min(340px,100%);border:1px solid #cbd5e1;border-radius:8px;padding:10px 12px;font:inherit}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.page-card{display:block;background:#fff;border:1px solid #d8dee8;border-radius:8px;padding:18px;text-decoration:none;color:#1e293b}
+.page-card:hover{border-color:#0f766e}.page-card strong{display:block;color:#0f172a;font-size:18px;margin:8px 0}.page-card p{line-height:1.55;color:#475569}
+footer{text-align:center;color:#64748b;padding:26px}
+@media(max-width:720px){main{padding:28px 14px}.tools{align-items:stretch;flex-direction:column}.tools input{width:100%;box-sizing:border-box}}
+`;
+    }
+    module2.exports = {
+      renderSafetyReport: renderSafetyReport2,
+      renderWebBookIndex: renderWebBookIndex2,
+      renderWebBookPage: renderWebBookPage2
     };
   }
 });
@@ -2020,10 +2477,10 @@ var MarktlExportModal = class extends import_obsidian.Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.empty();
-    this.setTitle("Export note to HTML");
+    this.setTitle("YSDA Publisher: export note to HTML");
     contentEl.createEl("p", {
       cls: "marktl-modal-intro",
-      text: "Choose what the HTML should do, then choose the visual style. MarkTL works best when the artifact has a job."
+      text: "Choose what the HTML should do, then choose the visual style. YSDA Publisher works best when the artifact has a job."
     });
     this.renderPresetCards(contentEl);
     new import_obsidian.Setting(contentEl).setName("Advanced").setDesc("Adjust provider, security, sharing, and exact artifact settings.").addButton((button) => button.setButtonText(this.showAdvanced ? "Hide advanced" : "Show advanced").onClick(() => {
@@ -2181,7 +2638,7 @@ var MarktlProgressModal = class extends import_obsidian2.Modal {
     this.setTitle("Export progress");
     this.contentEl.createEl("p", {
       cls: "marktl-modal-intro",
-      text: "MarkTL is converting this note to HTML."
+      text: "YSDA Publisher is converting Markdown to HTML."
     });
     const visualEl = this.contentEl.createDiv({ cls: "marktl-progress-visual" });
     this.statusEl = visualEl.createDiv({
@@ -2344,7 +2801,7 @@ var MarktlPreviewView = class extends import_obsidian3.ItemView {
   async copyPrompt(frame) {
     const text = this.getFrameText(frame) || this.stripHtml(this.state.html);
     await navigator.clipboard.writeText([
-      "Use this MarkTL HTML artifact as context for the next iteration.",
+      "Use this YSDA Publisher HTML artifact as context for the next iteration.",
       "",
       `Artifact: ${this.state.title || this.state.filePath || "HTML Preview"}`,
       `Preview security: ${this.state.previewSecurity}`,
@@ -2367,7 +2824,7 @@ var MarktlPreviewView = class extends import_obsidian3.ItemView {
     const section = this.getFirstSection(frame);
     const fallback = this.getFrameText(frame) || this.stripHtml(this.state.html);
     await navigator.clipboard.writeText([
-      "Give feedback on this MarkTL HTML artifact section.",
+      "Give feedback on this YSDA Publisher HTML artifact section.",
       "",
       `Artifact: ${this.state.title || this.state.filePath || "HTML Preview"}`,
       `Section: ${section.heading || "Whole document fallback"}`,
@@ -2580,7 +3037,7 @@ var MarktlResultModal = class extends import_obsidian4.Modal {
   }
   buildAiHandoffPrompt() {
     return [
-      "Use this MarkTL HTML artifact as context for the next iteration.",
+      "Use this YSDA Publisher HTML artifact as context for the next iteration.",
       "",
       `Source note: ${this.summary.sourcePath || this.summary.sourceTitle || "Unknown source note"}`,
       `HTML output: ${this.summary.publicUrl || this.summary.localPath || this.summary.outputPath}`,
@@ -2610,14 +3067,29 @@ var MarktlSettingTab = class extends import_obsidian5.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "MarkTL HTML Exporter" });
-    new import_obsidian5.Setting(containerEl).setName("Setup wizard").setDesc("Guided setup for local export, Claude AI conversion, and share-ready bundles.").addButton((button) => button.setButtonText("Open setup").setCta().onClick(() => {
+    containerEl.createEl("h2", { text: "YSDA Publisher" });
+    new import_obsidian5.Setting(containerEl).setName("Setup wizard").setDesc("Guided setup for active-note HTML export, AI conversion, and share-ready bundles.").addButton((button) => button.setButtonText("Open setup").setCta().onClick(() => {
       this.plugin.openSetupWizard();
     }));
     new import_obsidian5.Setting(containerEl).setName("Export folder").setDesc("Vault-relative folder for generated HTML files.").addText((text) => text.setPlaceholder("html-exports").setValue(this.plugin.settings.exportFolder).onChange(async (value) => {
       this.plugin.settings.exportFolder = value.trim() || "html-exports";
       await this.plugin.saveSettings();
     }));
+    containerEl.createEl("h3", { text: "Folder web book" });
+    this.addTextSetting(containerEl, "Web-book source folder", "Vault-relative folder containing Markdown notes to scan recursively.", "webBookSourceFolder", "Study Notes");
+    this.addTextSetting(containerEl, "Web-book output folder", "Vault-relative folder for the static web-book artifact.", "webBookOutputFolder", "html-exports/ysda-publisher");
+    this.addTextSetting(containerEl, "Web-book site title", "Title rendered on the generated index page.", "webBookSiteTitle", "YSDA Publisher");
+    this.addTextSetting(containerEl, "Web-book description", "Short description rendered on the generated index page.", "webBookSiteDescription", "Reviewed Markdown notes published as a static web book.");
+    new import_obsidian5.Setting(containerEl).setName("Default export visibility").setDesc("Used when a note omits visibility. Public folder export only includes public-safe notes.").addDropdown((dropdown) => dropdown.addOption("internal-draft", "internal-draft").addOption("public-safe", "public-safe").setValue(this.plugin.settings.defaultExportVisibility).onChange(async (value) => {
+      this.plugin.settings.defaultExportVisibility = value;
+      await this.plugin.saveSettings();
+    }));
+    new import_obsidian5.Setting(containerEl).setName("Require reviewed=true for public-safe export").setDesc("When enabled, notes marked public-safe are skipped unless reviewed: true is present.").addToggle((toggle) => toggle.setValue(this.plugin.settings.requireReviewedForPublicSafe).onChange(async (value) => {
+      this.plugin.settings.requireReviewedForPublicSafe = value;
+      await this.plugin.saveSettings();
+    }));
+    this.addTextAreaSetting(containerEl, "Blocked terms", "One blocked term or marker per line. Generic defaults avoid hardcoded internal names.", "blockedTerms", "CONFIDENTIAL\nINTERNAL ONLY\nDO NOT PUBLISH");
+    this.addTextAreaSetting(containerEl, "Blocked URL/domain fragments", "One URL or domain fragment per line, such as .internal or intranet.", "blockedUrlFragments", ".internal\nintranet\nlocalhost");
     new import_obsidian5.Setting(containerEl).setName("Artifact goal").setDesc("Default job for the HTML artifact: read, decide, review, compare, tune, explain code, or publish.").addDropdown((dropdown) => {
       for (const goal of (0, import_artifact_goals2.listArtifactGoals)()) {
         dropdown.addOption(goal.id, goal.name);
@@ -2715,11 +3187,11 @@ var MarktlSettingTab = class extends import_obsidian5.PluginSettingTab {
       await navigator.clipboard.writeText(buildPagesSetupChecklist(this.plugin.settings));
       new import_obsidian5.Notice("GitHub Pages setup checklist copied.");
     }));
-    this.addTextSetting(containerEl, "GitHub repository", "owner/repo for the Pages repository.", "githubRepo", "reallygood83/marktl-shares");
+    this.addTextSetting(containerEl, "GitHub repository", "owner/repo for the Pages repository.", "githubRepo", "owner/repo");
     this.addTextSetting(containerEl, "GitHub branch", "Branch to write files to.", "githubBranch", "main");
-    this.addTextSetting(containerEl, "GitHub Pages base URL", "Public Pages root URL. Leave blank to infer https://owner.github.io/repo.", "githubPagesBaseUrl", "https://reallygood83.github.io/marktl-shares");
-    this.addTextSetting(containerEl, "Publish path", "Folder path inside the repository. Exports go to <path>/<slug>/index.html.", "githubPublishPath", "marktl");
-    this.addTextSetting(containerEl, "Share home title", "Title for the generated index page that lists published exports.", "githubShareHomeTitle", "MarkTL Shared HTML");
+    this.addTextSetting(containerEl, "GitHub Pages base URL", "Public Pages root URL. Leave blank to infer https://owner.github.io/repo.", "githubPagesBaseUrl", "https://owner.github.io/repo");
+    this.addTextSetting(containerEl, "Publish path", "Folder path inside the repository. Exports go to <path>/<slug>/index.html.", "githubPublishPath", "ysda-publisher");
+    this.addTextSetting(containerEl, "Share home title", "Title for the generated index page that lists published exports.", "githubShareHomeTitle", "YSDA Publisher Shared HTML");
     this.addTextSetting(containerEl, "GitHub token", "Fine-grained token with Contents read/write permission for the repository.", "githubToken", "github_pat_...", true);
     new import_obsidian5.Setting(containerEl).setName("Copy share link by default").setDesc("Copies the public GitHub Pages URL after publish, or a local file:// link for local exports.").addToggle((toggle) => toggle.setValue(this.plugin.settings.copyShareLinkAfterExport).onChange(async (value) => {
       this.plugin.settings.copyShareLinkAfterExport = value;
@@ -2743,6 +3215,15 @@ var MarktlSettingTab = class extends import_obsidian5.PluginSettingTab {
       }
     });
   }
+  addTextAreaSetting(containerEl, name, description, key, placeholder) {
+    new import_obsidian5.Setting(containerEl).setName(name).setDesc(description).addTextArea((text) => {
+      text.setPlaceholder(placeholder).setValue(this.plugin.settings[key]).onChange(async (value) => {
+        this.plugin.settings[key] = value;
+        await this.plugin.saveSettings();
+      });
+      text.inputEl.rows = 5;
+    });
+  }
 };
 
 // src/setup-modal.ts
@@ -2757,7 +3238,7 @@ var MarktlSetupModal = class extends import_obsidian6.Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.empty();
-    this.setTitle("MarkTL setup");
+    this.setTitle("YSDA Publisher setup");
     contentEl.createEl("p", {
       cls: "marktl-modal-intro",
       text: "Choose the outcome you want from your HTML artifacts. Provider setup stays optional until you need richer AI-generated output."
@@ -2792,7 +3273,7 @@ var MarktlSetupModal = class extends import_obsidian6.Modal {
     const agentBox = contentEl.createDiv({ cls: "marktl-agent-setup-box" });
     agentBox.createEl("h3", { text: "Agent-assisted setup" });
     agentBox.createEl("p", {
-      text: "If you use Codex or Claude Code, copy a setup prompt and let your coding agent configure BRAT, MarkTL, GitHub Pages, and Giscus with you."
+      text: "If you use Codex or Claude Code, copy a setup prompt and let your coding agent configure BRAT, YSDA Publisher, GitHub Pages, and Giscus with you."
     });
     new import_obsidian6.Setting(agentBox).addButton((button) => button.setButtonText("Copy Codex setup prompt").onClick(() => this.copyAgentPrompt("codex"))).addButton((button) => button.setButtonText("Copy Claude setup prompt").onClick(() => this.copyAgentPrompt("claude")));
     new import_obsidian6.Setting(contentEl).addButton((button) => button.setButtonText("Check Claude CLI").onClick(() => {
@@ -2803,7 +3284,7 @@ var MarktlSetupModal = class extends import_obsidian6.Modal {
       this.plugin.settings.setupCompleted = true;
       await this.plugin.saveSettings();
       this.close();
-      new import_obsidian6.Notice("MarkTL setup saved.");
+      new import_obsidian6.Notice("YSDA Publisher setup saved.");
     }));
   }
   onClose() {
@@ -2919,16 +3400,16 @@ var MarktlSetupModal = class extends import_obsidian6.Modal {
 function buildAgentSetupPrompt(agent) {
   const agentName = agent === "codex" ? "Codex" : "Claude Code";
   return [
-    `You are helping me set up the MarkTL Obsidian plugin using ${agentName}.`,
+    `You are helping me set up the YSDA Publisher Obsidian plugin using ${agentName}.`,
     "",
     "Goal:",
-    "- Install MarkTL through BRAT from https://github.com/reallygood83/marktl.",
-    "- Configure MarkTL so an Obsidian Markdown note can be exported to a GitHub Pages HTML link.",
+    "- Install YSDA Publisher through BRAT from the configured plugin repository.",
+    "- Configure YSDA Publisher so an Obsidian Markdown note can be exported to a GitHub Pages HTML link.",
     "- Make the exported page comment-ready with Giscus GitHub comments.",
     "",
     "Please guide me step by step. Do not ask for secrets unless needed, and never print my GitHub token back to me.",
     "",
-    "Target MarkTL settings:",
+    "Target YSDA Publisher settings:",
     "- Share target: GitHub Pages link",
     "- Preview/export: Trusted interactive preview",
     "- Reader feedback: Giscus GitHub comments",
@@ -2936,14 +3417,14 @@ function buildAgentSetupPrompt(agent) {
     "- GitHub repository: owner/repo for my Pages repository",
     "- GitHub branch: main",
     "- GitHub Pages base URL: https://owner.github.io/repo",
-    "- Publish path: marktl",
+    "- Publish path: ysda-publisher",
     "- GitHub token: fine-grained token limited to the Pages repo with Contents read/write",
     "- Giscus repository: owner/repo with Discussions enabled",
     "- Giscus category: Announcements or General",
     "- Giscus repo ID and category ID: values from https://giscus.app",
     "",
     "Checklist:",
-    "1. Confirm BRAT has installed and enabled MarkTL.",
+    "1. Confirm BRAT has installed and enabled YSDA Publisher.",
     "2. Confirm the Pages repository exists and GitHub Pages is enabled for the target branch.",
     "3. Confirm the token has Contents read/write only for that repository.",
     "4. Confirm Giscus is enabled and the repo/category IDs are filled.",
@@ -2959,15 +3440,39 @@ function buildAgentSetupPrompt(agent) {
 var { convertWithAiFallback, getProviderPrivacyNote: getProviderPrivacyNote2 } = require_ai();
 var { buildAssetFileName, extractMarkdownImageReferences, rewriteHtmlImageSources } = require_assets();
 var { buildContextPackMarkdown, extractMarkdownContextTargets } = require_context_pack();
+var { convertMarkdownToHtml } = require_converter();
 var { injectReaderFeedback, shouldAttachReaderFeedback, validateGiscusConfig } = require_feedback();
 var { buildPagesUrl, buildPublishPath, buildShareHomeUrl, buildShortPagesUrl, inferPagesBaseUrl: inferPagesBaseUrl2, parseRepo, renderShareIndexHtml, updateShareIndex } = require_github_pages();
 var { validateHtmlArtifact } = require_html_qa();
 var { slugify } = require_html();
+var { buildPublishManifest } = require_publishManifest();
+var { evaluatePublishSafety } = require_publishSafety();
 var { migrateSettings } = require_settings();
+var { buildSearchEntry } = require_searchIndex();
 var { buildShortId, injectSocialMeta } = require_social();
 var { applyPresetToOptions } = require_presets();
+var { renderSafetyReport, renderWebBookIndex, renderWebBookPage } = require_ysdaWebBook();
 var DEFAULT_SETTINGS = {
   exportFolder: "html-exports",
+  webBookSourceFolder: "",
+  webBookOutputFolder: "html-exports/ysda-publisher",
+  webBookSiteTitle: "YSDA Publisher",
+  webBookSiteDescription: "Reviewed Markdown notes published as a static web book.",
+  blockedTerms: [
+    "CONFIDENTIAL",
+    "INTERNAL ONLY",
+    "DO NOT PUBLISH",
+    "\uBE44\uACF5\uAC1C",
+    "\uB300\uC678\uBE44"
+  ].join("\n"),
+  blockedUrlFragments: [
+    ".local",
+    ".internal",
+    "intranet",
+    "localhost"
+  ].join("\n"),
+  defaultExportVisibility: "internal-draft",
+  requireReviewedForPublicSafe: true,
   setupCompleted: false,
   artifactGoal: "read",
   artifactType: "faithful-note",
@@ -2983,8 +3488,8 @@ var DEFAULT_SETTINGS = {
   githubBranch: "main",
   githubToken: "",
   githubPagesBaseUrl: "",
-  githubPublishPath: "marktl",
-  githubShareHomeTitle: "MarkTL Shared HTML",
+  githubPublishPath: "ysda-publisher",
+  githubShareHomeTitle: "YSDA Publisher Shared HTML",
   giscusRepo: "",
   giscusRepoId: "",
   giscusCategory: "Announcements",
@@ -3008,12 +3513,12 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
       VIEW_TYPE_MARKTL_PREVIEW,
       (leaf) => new MarktlPreviewView(leaf)
     );
-    this.addRibbonIcon("file-code-2", "Export current note to HTML", () => {
+    this.addRibbonIcon("file-code-2", "YSDA Publisher: export current note to HTML", () => {
       this.openExportModal();
     });
     this.addCommand({
       id: "export-active-note-to-html",
-      name: "Export active note to HTML...",
+      name: "YSDA Publisher: Export active note to HTML",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const canRun = file instanceof import_obsidian7.TFile && file.extension === "md";
@@ -3025,7 +3530,7 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
     });
     this.addCommand({
       id: "quick-export-active-note-to-html",
-      name: "Quick export active note to HTML",
+      name: "YSDA Publisher: Quick export active note to HTML",
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const canRun = file instanceof import_obsidian7.TFile && file.extension === "md";
@@ -3036,10 +3541,23 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
       }
     });
     this.addCommand({
-      id: "open-marktl-setup",
-      name: "Open MarkTL setup wizard",
+      id: "export-folder-as-web-book",
+      name: "YSDA Publisher: Export folder as web book",
       callback: () => {
-        this.openSetupWizard();
+        void this.exportFolderAsWebBook();
+      }
+    });
+    this.addCommand({
+      id: "open-marktl-setup",
+      name: "YSDA Publisher: Open settings",
+      callback: () => {
+        const setting = this.app.setting;
+        if (setting) {
+          setting.open();
+          setting.openTabById(this.manifest.id);
+        } else {
+          this.openSetupWizard();
+        }
       }
     });
     this.addCommand({
@@ -3234,6 +3752,165 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
       const message = error instanceof Error ? error.message : String(error);
       progress.fail(message);
       new import_obsidian7.Notice(`HTML export failed: ${message}`);
+    }
+  }
+  async exportFolderAsWebBook() {
+    var _a;
+    const sourceFolder = (0, import_obsidian7.normalizePath)(this.settings.webBookSourceFolder.trim());
+    if (!sourceFolder) {
+      new import_obsidian7.Notice("Set a source folder in YSDA Publisher settings before exporting a web book.");
+      return;
+    }
+    const outputFolder = (0, import_obsidian7.normalizePath)(this.settings.webBookOutputFolder.trim() || DEFAULT_SETTINGS.webBookOutputFolder);
+    const markdownFiles = this.app.vault.getFiles().filter((file) => file.extension === "md" && this.isInFolder(file.path, sourceFolder)).sort((a, b) => a.path.localeCompare(b.path));
+    if (markdownFiles.length === 0) {
+      new import_obsidian7.Notice(`No Markdown notes found under ${sourceFolder}.`);
+      return;
+    }
+    const progress = new MarktlProgressModal(this.app);
+    progress.open();
+    progress.addStep(`Source folder: ${sourceFolder}`);
+    progress.addStep(`Output folder: ${outputFolder}`);
+    progress.addStep(`Scanning ${markdownFiles.length} Markdown note(s)...`);
+    const generatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    const pages = [];
+    const skipped = [];
+    const warnings = [];
+    const searchEntries = [];
+    const slugCounts = /* @__PURE__ */ new Map();
+    const usedAssetNamesBySlug = /* @__PURE__ */ new Map();
+    try {
+      await this.ensureFolder(outputFolder);
+      await this.app.vault.adapter.write((0, import_obsidian7.normalizePath)(`${outputFolder}/.nojekyll`), "");
+      for (const file of markdownFiles) {
+        progress.addStep(`Checking ${file.path}...`);
+        const markdown = await this.app.vault.read(file);
+        const safety = evaluatePublishSafety(markdown, {
+          sourcePath: file.path,
+          defaultVisibility: this.settings.defaultExportVisibility,
+          requireReviewedForPublicSafe: this.settings.requireReviewedForPublicSafe,
+          blockedTerms: this.linesFromSetting(this.settings.blockedTerms),
+          blockedUrlFragments: this.linesFromSetting(this.settings.blockedUrlFragments)
+        });
+        if (!safety.allowed) {
+          skipped.push({
+            sourcePath: file.path,
+            status: safety.status,
+            reasons: safety.reasons,
+            warnings: safety.warnings
+          });
+          continue;
+        }
+        const slug = this.buildWebBookSlug(file.path, sourceFolder, safety.metadata.title, slugCounts);
+        const pageFolder = (0, import_obsidian7.normalizePath)(`${outputFolder}/pages/${slug}`);
+        const assetPlan = {
+          folder: outputFolder,
+          basename: slug,
+          outputPath: (0, import_obsidian7.normalizePath)(`${pageFolder}/index.html`),
+          assetFolder: (0, import_obsidian7.normalizePath)(`${pageFolder}/assets`),
+          assetRelativePrefix: "assets"
+        };
+        const assetResult = await this.resolveImageAssets(markdown, file, assetPlan);
+        if (assetResult.warnings.length > 0) {
+          skipped.push({
+            sourcePath: file.path,
+            status: "blocked",
+            reasons: assetResult.warnings,
+            warnings: safety.warnings
+          });
+          continue;
+        }
+        const converted = convertMarkdownToHtml(markdown, {
+          template: "ysda-web-book",
+          trusted: false,
+          sourcePath: file.path
+        });
+        const articleHtml = this.extractArticleHtml(rewriteHtmlImageSources(converted, assetResult.mappings));
+        const pageUrl = `pages/${slug}/`;
+        const pageRecord = {
+          title: safety.metadata.title,
+          slug,
+          url: pageUrl,
+          sourcePath: file.path,
+          tags: safety.metadata.tags,
+          visibility: safety.metadata.visibility,
+          updatedAt: ((_a = file.stat) == null ? void 0 : _a.mtime) ? new Date(file.stat.mtime).toISOString() : generatedAt,
+          summary: safety.metadata.summary,
+          readingTimeMinutes: Math.max(1, Math.ceil(String(safety.body || markdown).split(/\s+/).filter(Boolean).length / 220)),
+          warnings: [...safety.warnings]
+        };
+        pages.push(pageRecord);
+        searchEntries.push(buildSearchEntry(pageRecord, safety.body || markdown));
+        usedAssetNamesBySlug.set(slug, new Set(assetResult.mappings.map((mapping) => mapping.destinationPath)));
+        await this.copyImageAssets(assetResult.mappings);
+        await this.ensureParentFolder(assetPlan.outputPath);
+        await this.app.vault.adapter.write(assetPlan.outputPath, renderWebBookPage({
+          ...pageRecord,
+          articleHtml,
+          generatedAt,
+          siteTitle: this.settings.webBookSiteTitle || "YSDA Publisher"
+        }));
+      }
+      const orderedPages = pages.map((page, index) => ({
+        ...page,
+        previous: index > 0 ? pages[index - 1] : null,
+        next: index < pages.length - 1 ? pages[index + 1] : null
+      }));
+      for (const page of orderedPages) {
+        const htmlPath = (0, import_obsidian7.normalizePath)(`${outputFolder}/${page.url}index.html`);
+        const current = await this.app.vault.adapter.read(htmlPath);
+        await this.app.vault.adapter.write(htmlPath, renderWebBookPage({
+          ...page,
+          articleHtml: this.extractArticleHtml(current),
+          generatedAt,
+          siteTitle: this.settings.webBookSiteTitle || "YSDA Publisher"
+        }));
+      }
+      const manifest = buildPublishManifest({
+        generatedAt,
+        sourceFolder,
+        outputFolder,
+        pages,
+        skipped,
+        warnings
+      });
+      const safetyReport = {
+        generatedAt,
+        sourceFolder,
+        outputFolder,
+        summary: {
+          exportedCount: pages.length,
+          skippedCount: skipped.filter((item) => item.status !== "blocked").length,
+          blockedCount: skipped.filter((item) => item.status === "blocked").length
+        },
+        pages,
+        skipped,
+        warnings
+      };
+      await this.app.vault.adapter.write((0, import_obsidian7.normalizePath)(`${outputFolder}/search.json`), JSON.stringify(searchEntries, null, 2));
+      await this.app.vault.adapter.write((0, import_obsidian7.normalizePath)(`${outputFolder}/publish-manifest.json`), JSON.stringify(manifest, null, 2));
+      await this.app.vault.adapter.write((0, import_obsidian7.normalizePath)(`${outputFolder}/safety-report.json`), JSON.stringify(safetyReport, null, 2));
+      await this.app.vault.adapter.write((0, import_obsidian7.normalizePath)(`${outputFolder}/safety-report.html`), renderSafetyReport(safetyReport, {
+        siteTitle: this.settings.webBookSiteTitle || "YSDA Publisher"
+      }));
+      await this.app.vault.adapter.write((0, import_obsidian7.normalizePath)(`${outputFolder}/index.html`), renderWebBookIndex({
+        siteTitle: this.settings.webBookSiteTitle || "YSDA Publisher",
+        siteDescription: this.settings.webBookSiteDescription || DEFAULT_SETTINGS.webBookSiteDescription,
+        generatedAt,
+        pages,
+        skipped,
+        warnings
+      }));
+      const skippedCount = skipped.length;
+      progress.complete(`Web book exported: ${pages.length} page(s), ${skippedCount} skipped/blocked.`);
+      new import_obsidian7.Notice(`YSDA Publisher web book exported to ${outputFolder}.`);
+      if (usedAssetNamesBySlug.size === 0) {
+        progress.addStep("No local image assets were bundled.");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      progress.fail(message);
+      new import_obsidian7.Notice(`Web book export failed: ${message}`);
     }
   }
   async prepareOutputPlan(source, options) {
@@ -3440,12 +4117,51 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
       }
     }
   }
+  async ensureFolder(folderPath) {
+    const normalized = (0, import_obsidian7.normalizePath)(folderPath);
+    if (!normalized || await this.app.vault.adapter.exists(normalized)) {
+      return;
+    }
+    await this.ensureParentFolder(`${normalized}/.keep`);
+  }
+  linesFromSetting(value) {
+    return String(value || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  }
+  isInFolder(filePath, folderPath) {
+    const normalizedFile = (0, import_obsidian7.normalizePath)(filePath);
+    const normalizedFolder = (0, import_obsidian7.normalizePath)(folderPath).replace(/\/+$/g, "");
+    return normalizedFile === normalizedFolder || normalizedFile.startsWith(`${normalizedFolder}/`);
+  }
+  buildWebBookSlug(sourcePath, sourceFolder, title, counts) {
+    const relative = (0, import_obsidian7.normalizePath)(sourcePath).replace(new RegExp(`^${this.escapeRegExp((0, import_obsidian7.normalizePath)(sourceFolder).replace(/\/+$/g, ""))}/?`), "");
+    const base = slugify(relative.replace(/\.md$/i, "") || title || sourcePath);
+    const hash = this.shortHash(relative || sourcePath);
+    const candidate = `${base}-${hash}`;
+    const count = counts.get(candidate) || 0;
+    counts.set(candidate, count + 1);
+    return count > 0 ? `${candidate}-${count + 1}` : candidate;
+  }
+  shortHash(value) {
+    let hash = 5381;
+    for (const char of String(value || "")) {
+      hash = (hash << 5) + hash + char.charCodeAt(0);
+      hash >>>= 0;
+    }
+    return hash.toString(36).slice(0, 6);
+  }
+  escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  extractArticleHtml(html) {
+    const match = /<article[^>]*>\s*([\s\S]*?)\s*<\/article>/i.exec(String(html || ""));
+    return (match ? match[1] : String(html || "")).replace(/<pre class="frontmatter">[\s\S]*?<\/pre>\s*/i, "").trim();
+  }
   async writeShareReadme(folder, basename, sourcePath, options) {
     const readmePath = (0, import_obsidian7.normalizePath)(`${folder}/share/${basename}/README.md`);
     const content = [
       `# ${basename}`,
       "",
-      "This folder is a static MarkTL HTML export bundle.",
+      "This folder is a static YSDA Publisher HTML export bundle.",
       "",
       `- Source note: ${sourcePath}`,
       `- Artifact goal: ${options.artifactGoal}`,
@@ -3462,10 +4178,10 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
   async publishGithubPages(plan, mappings, sourcePath, markdown, options, shortId = buildShortId(plan.basename), metadata = this.extractShareMetadata(markdown, plan.basename)) {
     const repo = parseRepo(this.settings.githubRepo);
     if (!repo) {
-      throw new Error("GitHub Pages repo is not configured. Use owner/repo in MarkTL settings.");
+      throw new Error("GitHub Pages repo is not configured. Use owner/repo in YSDA Publisher settings.");
     }
     if (!this.settings.githubToken.trim()) {
-      throw new Error("GitHub token is not configured. Add a token with Contents write permission in MarkTL settings.");
+      throw new Error("GitHub token is not configured. Add a token with Contents write permission in YSDA Publisher settings.");
     }
     const branch = this.settings.githubBranch.trim() || "main";
     const basePath = this.settings.githubPublishPath;
@@ -3521,7 +4237,7 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
     const existing = await this.getGithubJson(owner, repo, branch, indexPath);
     const index = updateShareIndex(existing, entry);
     const html = renderShareIndexHtml(index, {
-      title: this.settings.githubShareHomeTitle || "MarkTL Shared HTML",
+      title: this.settings.githubShareHomeTitle || "YSDA Publisher Shared HTML",
       baseUrl: buildShareHomeUrl(pagesBaseUrl, basePath).replace(/\/+$/g, "")
     });
     await this.putGithubTextFile(owner, repo, branch, indexPath, JSON.stringify(index, null, 2));
@@ -3569,7 +4285,7 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        message: `Publish MarkTL export ${publishPath}`,
+        message: `Publish YSDA Publisher export ${publishPath}`,
         content: this.arrayBufferToBase64(data),
         branch,
         sha: existingJson == null ? void 0 : existingJson.sha

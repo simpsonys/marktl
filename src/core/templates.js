@@ -2,6 +2,30 @@ const { escapeHtml } = require('./html.js');
 
 const templates = [
   {
+    id: 'ysda-web-book',
+    name: 'YSDA Web Book',
+    description: 'Readable Korean/English mixed study-note style for reviewed web-book pages.',
+    css: `
+      body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1e293b; background: #f5f7fb; }
+      main { max-width: 980px; margin: 0 auto; padding: 44px 24px 72px; box-sizing: border-box; }
+      article { background: #ffffff; border: 1px solid #d8dee8; border-radius: 8px; padding: 32px; }
+      h1, h2, h3 { color: #0f172a; line-height: 1.2; }
+      h1 { font-size: 42px; margin-top: 0; }
+      h2 { margin-top: 36px; padding-top: 18px; border-top: 1px solid #e2e8f0; }
+      p, li { line-height: 1.72; }
+      a { color: #0f766e; }
+      code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      pre { overflow: auto; padding: 16px; background: #111827; color: #f9fafb; border-radius: 8px; }
+      table { width: 100%; border-collapse: collapse; margin: 18px 0; }
+      th, td { border: 1px solid #d8dee8; padding: 8px 10px; text-align: left; }
+      img { max-width: 100%; height: auto; border-radius: 6px; }
+      .frontmatter { white-space: pre-wrap; border: 1px solid #d8dee8; background: #f8fafc; padding: 14px; border-radius: 8px; color: #475569; }
+      .callout { border-left: 4px solid #0f766e; background: #ecfdf5; padding: 12px 16px; margin: 18px 0; border-radius: 6px; }
+      .callout-title { font-weight: 700; margin-bottom: 6px; }
+      @media (max-width: 720px) { main { padding: 24px 14px 56px; } article { padding: 20px; } h1 { font-size: 34px; } }
+    `,
+  },
+  {
     id: 'minimal',
     name: 'Minimal',
     description: 'Clean readable document styling for faithful note exports.',
@@ -297,7 +321,7 @@ function listTemplates() {
 }
 
 function getTemplate(id) {
-  return templates.find((template) => template.id === id) || templates[0];
+  return templates.find((template) => template.id === id) || templates.find((template) => template.id === 'minimal') || templates[0];
 }
 
 function wrapWithTemplate(bodyHtml, options = {}) {

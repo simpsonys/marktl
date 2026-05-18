@@ -15,7 +15,7 @@ export class MarktlProgressModal extends Modal {
     this.setTitle('Export progress');
     this.contentEl.createEl('p', {
       cls: 'marktl-modal-intro',
-      text: 'MarkTL is converting this note to HTML.',
+      text: 'YSDA Publisher is converting Markdown to HTML.',
     });
     const visualEl = this.contentEl.createDiv({ cls: 'marktl-progress-visual' });
     this.statusEl = visualEl.createDiv({

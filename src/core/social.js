@@ -10,8 +10,8 @@ function buildShortId(value) {
 }
 
 function injectSocialMeta(html, options = {}) {
-  const title = options.title || 'MarkTL HTML artifact';
-  const description = options.description || 'A shared HTML document generated with MarkTL.';
+  const title = options.title || 'YSDA Publisher HTML artifact';
+  const description = options.description || 'A shared HTML document generated with YSDA Publisher.';
   const url = options.url || '';
   const image = options.image || '';
   const tags = [

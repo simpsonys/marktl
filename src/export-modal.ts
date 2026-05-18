@@ -38,11 +38,11 @@ export class MarktlExportModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    this.setTitle('Export note to HTML');
+    this.setTitle('YSDA Publisher: export note to HTML');
 
     contentEl.createEl('p', {
       cls: 'marktl-modal-intro',
-      text: 'Choose what the HTML should do, then choose the visual style. MarkTL works best when the artifact has a job.',
+      text: 'Choose what the HTML should do, then choose the visual style. YSDA Publisher works best when the artifact has a job.',
     });
 
     this.renderPresetCards(contentEl);

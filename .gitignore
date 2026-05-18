@@ -5,3 +5,5 @@ dist/
 html-exports/
 .omx/
 docs/.pdca-status.json
+
+.agent-prompt/

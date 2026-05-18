@@ -19,11 +19,11 @@ export class MarktlSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl('h2', { text: 'MarkTL HTML Exporter' });
+    containerEl.createEl('h2', { text: 'YSDA Publisher' });
 
     new Setting(containerEl)
       .setName('Setup wizard')
-      .setDesc('Guided setup for local export, Claude AI conversion, and share-ready bundles.')
+      .setDesc('Guided setup for active-note HTML export, AI conversion, and share-ready bundles.')
       .addButton((button) => button
         .setButtonText('Open setup')
         .setCta()
@@ -41,6 +41,38 @@ export class MarktlSettingTab extends PluginSettingTab {
           this.plugin.settings.exportFolder = value.trim() || 'html-exports';
           await this.plugin.saveSettings();
         }));
+
+    containerEl.createEl('h3', { text: 'Folder web book' });
+
+    this.addTextSetting(containerEl, 'Web-book source folder', 'Vault-relative folder containing Markdown notes to scan recursively.', 'webBookSourceFolder', 'Study Notes');
+    this.addTextSetting(containerEl, 'Web-book output folder', 'Vault-relative folder for the static web-book artifact.', 'webBookOutputFolder', 'html-exports/ysda-publisher');
+    this.addTextSetting(containerEl, 'Web-book site title', 'Title rendered on the generated index page.', 'webBookSiteTitle', 'YSDA Publisher');
+    this.addTextSetting(containerEl, 'Web-book description', 'Short description rendered on the generated index page.', 'webBookSiteDescription', 'Reviewed Markdown notes published as a static web book.');
+
+    new Setting(containerEl)
+      .setName('Default export visibility')
+      .setDesc('Used when a note omits visibility. Public folder export only includes public-safe notes.')
+      .addDropdown((dropdown) => dropdown
+        .addOption('internal-draft', 'internal-draft')
+        .addOption('public-safe', 'public-safe')
+        .setValue(this.plugin.settings.defaultExportVisibility)
+        .onChange(async (value) => {
+          this.plugin.settings.defaultExportVisibility = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Require reviewed=true for public-safe export')
+      .setDesc('When enabled, notes marked public-safe are skipped unless reviewed: true is present.')
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.requireReviewedForPublicSafe)
+        .onChange(async (value) => {
+          this.plugin.settings.requireReviewedForPublicSafe = value;
+          await this.plugin.saveSettings();
+        }));
+
+    this.addTextAreaSetting(containerEl, 'Blocked terms', 'One blocked term or marker per line. Generic defaults avoid hardcoded internal names.', 'blockedTerms', 'CONFIDENTIAL\nINTERNAL ONLY\nDO NOT PUBLISH');
+    this.addTextAreaSetting(containerEl, 'Blocked URL/domain fragments', 'One URL or domain fragment per line, such as .internal or intranet.', 'blockedUrlFragments', '.internal\nintranet\nlocalhost');
 
     new Setting(containerEl)
       .setName('Artifact goal')
@@ -258,11 +290,11 @@ export class MarktlSettingTab extends PluginSettingTab {
           new Notice('GitHub Pages setup checklist copied.');
         }));
 
-    this.addTextSetting(containerEl, 'GitHub repository', 'owner/repo for the Pages repository.', 'githubRepo', 'reallygood83/marktl-shares');
+    this.addTextSetting(containerEl, 'GitHub repository', 'owner/repo for the Pages repository.', 'githubRepo', 'owner/repo');
     this.addTextSetting(containerEl, 'GitHub branch', 'Branch to write files to.', 'githubBranch', 'main');
-    this.addTextSetting(containerEl, 'GitHub Pages base URL', 'Public Pages root URL. Leave blank to infer https://owner.github.io/repo.', 'githubPagesBaseUrl', 'https://reallygood83.github.io/marktl-shares');
-    this.addTextSetting(containerEl, 'Publish path', 'Folder path inside the repository. Exports go to <path>/<slug>/index.html.', 'githubPublishPath', 'marktl');
-    this.addTextSetting(containerEl, 'Share home title', 'Title for the generated index page that lists published exports.', 'githubShareHomeTitle', 'MarkTL Shared HTML');
+    this.addTextSetting(containerEl, 'GitHub Pages base URL', 'Public Pages root URL. Leave blank to infer https://owner.github.io/repo.', 'githubPagesBaseUrl', 'https://owner.github.io/repo');
+    this.addTextSetting(containerEl, 'Publish path', 'Folder path inside the repository. Exports go to <path>/<slug>/index.html.', 'githubPublishPath', 'ysda-publisher');
+    this.addTextSetting(containerEl, 'Share home title', 'Title for the generated index page that lists published exports.', 'githubShareHomeTitle', 'YSDA Publisher Shared HTML');
     this.addTextSetting(containerEl, 'GitHub token', 'Fine-grained token with Contents read/write permission for the repository.', 'githubToken', 'github_pat_...', true);
 
     new Setting(containerEl)
@@ -293,7 +325,7 @@ export class MarktlSettingTab extends PluginSettingTab {
     containerEl: HTMLElement,
     name: string,
     description: string,
-    key: 'githubRepo' | 'githubBranch' | 'githubPagesBaseUrl' | 'githubPublishPath' | 'githubShareHomeTitle' | 'githubToken' | 'giscusRepo' | 'giscusRepoId' | 'giscusCategory' | 'giscusCategoryId' | 'giscusMapping' | 'giscusTheme',
+      key: 'githubRepo' | 'githubBranch' | 'githubPagesBaseUrl' | 'githubPublishPath' | 'githubShareHomeTitle' | 'githubToken' | 'giscusRepo' | 'giscusRepoId' | 'giscusCategory' | 'giscusCategoryId' | 'giscusMapping' | 'giscusTheme' | 'webBookSourceFolder' | 'webBookOutputFolder' | 'webBookSiteTitle' | 'webBookSiteDescription',
     placeholder: string,
     password = false,
   ): void {
@@ -311,6 +343,28 @@ export class MarktlSettingTab extends PluginSettingTab {
         if (password) {
           text.inputEl.type = 'password';
         }
+      });
+  }
+
+  private addTextAreaSetting(
+    containerEl: HTMLElement,
+    name: string,
+    description: string,
+    key: 'blockedTerms' | 'blockedUrlFragments',
+    placeholder: string,
+  ): void {
+    new Setting(containerEl)
+      .setName(name)
+      .setDesc(description)
+      .addTextArea((text) => {
+        text
+          .setPlaceholder(placeholder)
+          .setValue(this.plugin.settings[key])
+          .onChange(async (value) => {
+            this.plugin.settings[key] = value;
+            await this.plugin.saveSettings();
+          });
+        text.inputEl.rows = 5;
       });
   }
 }

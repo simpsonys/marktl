@@ -10,16 +10,40 @@ import type { ExportOptions, ExportSummary, MarktlSettings, PreviewState } from 
 const { convertWithAiFallback, getProviderPrivacyNote } = require('./core/ai.js');
 const { buildAssetFileName, extractMarkdownImageReferences, rewriteHtmlImageSources } = require('./core/assets.js');
 const { buildContextPackMarkdown, extractMarkdownContextTargets } = require('./core/context-pack.js');
+const { convertMarkdownToHtml } = require('./core/converter.js');
 const { injectReaderFeedback, shouldAttachReaderFeedback, validateGiscusConfig } = require('./core/feedback.js');
 const { buildPagesUrl, buildPublishPath, buildShareHomeUrl, buildShortPagesUrl, inferPagesBaseUrl, parseRepo, renderShareIndexHtml, updateShareIndex } = require('./core/github-pages.js');
 const { validateHtmlArtifact } = require('./core/html-qa.js');
 const { slugify } = require('./core/html.js');
+const { buildPublishManifest } = require('./core/publishManifest.js');
+const { evaluatePublishSafety } = require('./core/publishSafety.js');
 const { migrateSettings } = require('./core/settings.js');
+const { buildSearchEntry } = require('./core/searchIndex.js');
 const { buildShortId, injectSocialMeta } = require('./core/social.js');
 const { applyPresetToOptions } = require('./core/presets.js');
+const { renderSafetyReport, renderWebBookIndex, renderWebBookPage } = require('./templates/ysdaWebBook.js');
 
 const DEFAULT_SETTINGS: MarktlSettings = {
   exportFolder: 'html-exports',
+  webBookSourceFolder: '',
+  webBookOutputFolder: 'html-exports/ysda-publisher',
+  webBookSiteTitle: 'YSDA Publisher',
+  webBookSiteDescription: 'Reviewed Markdown notes published as a static web book.',
+  blockedTerms: [
+    'CONFIDENTIAL',
+    'INTERNAL ONLY',
+    'DO NOT PUBLISH',
+    '비공개',
+    '대외비',
+  ].join('\n'),
+  blockedUrlFragments: [
+    '.local',
+    '.internal',
+    'intranet',
+    'localhost',
+  ].join('\n'),
+  defaultExportVisibility: 'internal-draft',
+  requireReviewedForPublicSafe: true,
   setupCompleted: false,
   artifactGoal: 'read',
   artifactType: 'faithful-note',
@@ -35,8 +59,8 @@ const DEFAULT_SETTINGS: MarktlSettings = {
   githubBranch: 'main',
   githubToken: '',
   githubPagesBaseUrl: '',
-  githubPublishPath: 'marktl',
-  githubShareHomeTitle: 'MarkTL Shared HTML',
+  githubPublishPath: 'ysda-publisher',
+  githubShareHomeTitle: 'YSDA Publisher Shared HTML',
   giscusRepo: '',
   giscusRepoId: '',
   giscusCategory: 'Announcements',
@@ -77,13 +101,13 @@ export default class MarktlPlugin extends Plugin {
       (leaf: WorkspaceLeaf) => new MarktlPreviewView(leaf),
     );
 
-    this.addRibbonIcon('file-code-2', 'Export current note to HTML', () => {
+    this.addRibbonIcon('file-code-2', 'YSDA Publisher: export current note to HTML', () => {
       this.openExportModal();
     });
 
     this.addCommand({
       id: 'export-active-note-to-html',
-      name: 'Export active note to HTML...',
+      name: 'YSDA Publisher: Export active note to HTML',
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const canRun = file instanceof TFile && file.extension === 'md';
@@ -96,7 +120,7 @@ export default class MarktlPlugin extends Plugin {
 
     this.addCommand({
       id: 'quick-export-active-note-to-html',
-      name: 'Quick export active note to HTML',
+      name: 'YSDA Publisher: Quick export active note to HTML',
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         const canRun = file instanceof TFile && file.extension === 'md';
@@ -108,10 +132,24 @@ export default class MarktlPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'open-marktl-setup',
-      name: 'Open MarkTL setup wizard',
+      id: 'export-folder-as-web-book',
+      name: 'YSDA Publisher: Export folder as web book',
       callback: () => {
-        this.openSetupWizard();
+        void this.exportFolderAsWebBook();
+      },
+    });
+
+    this.addCommand({
+      id: 'open-marktl-setup',
+      name: 'YSDA Publisher: Open settings',
+      callback: () => {
+        const setting = (this.app as typeof this.app & { setting?: { open: () => void; openTabById: (id: string) => void } }).setting;
+        if (setting) {
+          setting.open();
+          setting.openTabById(this.manifest.id);
+        } else {
+          this.openSetupWizard();
+        }
       },
     });
 
@@ -327,6 +365,181 @@ export default class MarktlPlugin extends Plugin {
       const message = error instanceof Error ? error.message : String(error);
       progress.fail(message);
       new Notice(`HTML export failed: ${message}`);
+    }
+  }
+
+  async exportFolderAsWebBook(): Promise<void> {
+    const sourceFolder = normalizePath(this.settings.webBookSourceFolder.trim());
+    if (!sourceFolder) {
+      new Notice('Set a source folder in YSDA Publisher settings before exporting a web book.');
+      return;
+    }
+
+    const outputFolder = normalizePath(this.settings.webBookOutputFolder.trim() || DEFAULT_SETTINGS.webBookOutputFolder);
+    const markdownFiles = this.app.vault.getFiles()
+      .filter((file) => file.extension === 'md' && this.isInFolder(file.path, sourceFolder))
+      .sort((a, b) => a.path.localeCompare(b.path));
+
+    if (markdownFiles.length === 0) {
+      new Notice(`No Markdown notes found under ${sourceFolder}.`);
+      return;
+    }
+
+    const progress = new MarktlProgressModal(this.app);
+    progress.open();
+    progress.addStep(`Source folder: ${sourceFolder}`);
+    progress.addStep(`Output folder: ${outputFolder}`);
+    progress.addStep(`Scanning ${markdownFiles.length} Markdown note(s)...`);
+
+    const generatedAt = new Date().toISOString();
+    const pages: Array<any> = [];
+    const skipped: Array<any> = [];
+    const warnings: string[] = [];
+    const searchEntries: Array<any> = [];
+    const slugCounts = new Map<string, number>();
+    const usedAssetNamesBySlug = new Map<string, Set<string>>();
+
+    try {
+      await this.ensureFolder(outputFolder);
+      await this.app.vault.adapter.write(normalizePath(`${outputFolder}/.nojekyll`), '');
+
+      for (const file of markdownFiles) {
+        progress.addStep(`Checking ${file.path}...`);
+        const markdown = await this.app.vault.read(file);
+        const safety = evaluatePublishSafety(markdown, {
+          sourcePath: file.path,
+          defaultVisibility: this.settings.defaultExportVisibility,
+          requireReviewedForPublicSafe: this.settings.requireReviewedForPublicSafe,
+          blockedTerms: this.linesFromSetting(this.settings.blockedTerms),
+          blockedUrlFragments: this.linesFromSetting(this.settings.blockedUrlFragments),
+        });
+
+        if (!safety.allowed) {
+          skipped.push({
+            sourcePath: file.path,
+            status: safety.status,
+            reasons: safety.reasons,
+            warnings: safety.warnings,
+          });
+          continue;
+        }
+
+        const slug = this.buildWebBookSlug(file.path, sourceFolder, safety.metadata.title, slugCounts);
+        const pageFolder = normalizePath(`${outputFolder}/pages/${slug}`);
+        const assetPlan: OutputPlan = {
+          folder: outputFolder,
+          basename: slug,
+          outputPath: normalizePath(`${pageFolder}/index.html`),
+          assetFolder: normalizePath(`${pageFolder}/assets`),
+          assetRelativePrefix: 'assets',
+        };
+        const assetResult = await this.resolveImageAssets(markdown, file, assetPlan);
+        if (assetResult.warnings.length > 0) {
+          skipped.push({
+            sourcePath: file.path,
+            status: 'blocked',
+            reasons: assetResult.warnings,
+            warnings: safety.warnings,
+          });
+          continue;
+        }
+
+        const converted = convertMarkdownToHtml(markdown, {
+          template: 'ysda-web-book',
+          trusted: false,
+          sourcePath: file.path,
+        });
+        const articleHtml = this.extractArticleHtml(rewriteHtmlImageSources(converted, assetResult.mappings));
+        const pageUrl = `pages/${slug}/`;
+        const pageRecord = {
+          title: safety.metadata.title,
+          slug,
+          url: pageUrl,
+          sourcePath: file.path,
+          tags: safety.metadata.tags,
+          visibility: safety.metadata.visibility,
+          updatedAt: file.stat?.mtime ? new Date(file.stat.mtime).toISOString() : generatedAt,
+          summary: safety.metadata.summary,
+          readingTimeMinutes: Math.max(1, Math.ceil(String(safety.body || markdown).split(/\s+/).filter(Boolean).length / 220)),
+          warnings: [...safety.warnings],
+        };
+
+        pages.push(pageRecord);
+        searchEntries.push(buildSearchEntry(pageRecord, safety.body || markdown));
+        usedAssetNamesBySlug.set(slug, new Set(assetResult.mappings.map((mapping) => mapping.destinationPath)));
+        await this.copyImageAssets(assetResult.mappings);
+        await this.ensureParentFolder(assetPlan.outputPath);
+        await this.app.vault.adapter.write(assetPlan.outputPath, renderWebBookPage({
+          ...pageRecord,
+          articleHtml,
+          generatedAt,
+          siteTitle: this.settings.webBookSiteTitle || 'YSDA Publisher',
+        }));
+      }
+
+      const orderedPages = pages.map((page, index) => ({
+        ...page,
+        previous: index > 0 ? pages[index - 1] : null,
+        next: index < pages.length - 1 ? pages[index + 1] : null,
+      }));
+      for (const page of orderedPages) {
+        const htmlPath = normalizePath(`${outputFolder}/${page.url}index.html`);
+        const current = await this.app.vault.adapter.read(htmlPath);
+        await this.app.vault.adapter.write(htmlPath, renderWebBookPage({
+          ...page,
+          articleHtml: this.extractArticleHtml(current),
+          generatedAt,
+          siteTitle: this.settings.webBookSiteTitle || 'YSDA Publisher',
+        }));
+      }
+
+      const manifest = buildPublishManifest({
+        generatedAt,
+        sourceFolder,
+        outputFolder,
+        pages,
+        skipped,
+        warnings,
+      });
+      const safetyReport = {
+        generatedAt,
+        sourceFolder,
+        outputFolder,
+        summary: {
+          exportedCount: pages.length,
+          skippedCount: skipped.filter((item) => item.status !== 'blocked').length,
+          blockedCount: skipped.filter((item) => item.status === 'blocked').length,
+        },
+        pages,
+        skipped,
+        warnings,
+      };
+
+      await this.app.vault.adapter.write(normalizePath(`${outputFolder}/search.json`), JSON.stringify(searchEntries, null, 2));
+      await this.app.vault.adapter.write(normalizePath(`${outputFolder}/publish-manifest.json`), JSON.stringify(manifest, null, 2));
+      await this.app.vault.adapter.write(normalizePath(`${outputFolder}/safety-report.json`), JSON.stringify(safetyReport, null, 2));
+      await this.app.vault.adapter.write(normalizePath(`${outputFolder}/safety-report.html`), renderSafetyReport(safetyReport, {
+        siteTitle: this.settings.webBookSiteTitle || 'YSDA Publisher',
+      }));
+      await this.app.vault.adapter.write(normalizePath(`${outputFolder}/index.html`), renderWebBookIndex({
+        siteTitle: this.settings.webBookSiteTitle || 'YSDA Publisher',
+        siteDescription: this.settings.webBookSiteDescription || DEFAULT_SETTINGS.webBookSiteDescription,
+        generatedAt,
+        pages,
+        skipped,
+        warnings,
+      }));
+
+      const skippedCount = skipped.length;
+      progress.complete(`Web book exported: ${pages.length} page(s), ${skippedCount} skipped/blocked.`);
+      new Notice(`YSDA Publisher web book exported to ${outputFolder}.`);
+      if (usedAssetNamesBySlug.size === 0) {
+        progress.addStep('No local image assets were bundled.');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      progress.fail(message);
+      new Notice(`Web book export failed: ${message}`);
     }
   }
 
@@ -567,12 +780,61 @@ export default class MarktlPlugin extends Plugin {
     }
   }
 
+  private async ensureFolder(folderPath: string): Promise<void> {
+    const normalized = normalizePath(folderPath);
+    if (!normalized || await this.app.vault.adapter.exists(normalized)) {
+      return;
+    }
+    await this.ensureParentFolder(`${normalized}/.keep`);
+  }
+
+  private linesFromSetting(value: string): string[] {
+    return String(value || '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+  }
+
+  private isInFolder(filePath: string, folderPath: string): boolean {
+    const normalizedFile = normalizePath(filePath);
+    const normalizedFolder = normalizePath(folderPath).replace(/\/+$/g, '');
+    return normalizedFile === normalizedFolder || normalizedFile.startsWith(`${normalizedFolder}/`);
+  }
+
+  private buildWebBookSlug(sourcePath: string, sourceFolder: string, title: string, counts: Map<string, number>): string {
+    const relative = normalizePath(sourcePath).replace(new RegExp(`^${this.escapeRegExp(normalizePath(sourceFolder).replace(/\/+$/g, ''))}/?`), '');
+    const base = slugify(relative.replace(/\.md$/i, '') || title || sourcePath);
+    const hash = this.shortHash(relative || sourcePath);
+    const candidate = `${base}-${hash}`;
+    const count = counts.get(candidate) || 0;
+    counts.set(candidate, count + 1);
+    return count > 0 ? `${candidate}-${count + 1}` : candidate;
+  }
+
+  private shortHash(value: string): string {
+    let hash = 5381;
+    for (const char of String(value || '')) {
+      hash = ((hash << 5) + hash) + char.charCodeAt(0);
+      hash >>>= 0;
+    }
+    return hash.toString(36).slice(0, 6);
+  }
+
+  private escapeRegExp(value: string): string {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  private extractArticleHtml(html: string): string {
+    const match = /<article[^>]*>\s*([\s\S]*?)\s*<\/article>/i.exec(String(html || ''));
+    return (match ? match[1] : String(html || '')).replace(/<pre class="frontmatter">[\s\S]*?<\/pre>\s*/i, '').trim();
+  }
+
   private async writeShareReadme(folder: string, basename: string, sourcePath: string, options: ExportOptions): Promise<void> {
     const readmePath = normalizePath(`${folder}/share/${basename}/README.md`);
     const content = [
       `# ${basename}`,
       '',
-      'This folder is a static MarkTL HTML export bundle.',
+      'This folder is a static YSDA Publisher HTML export bundle.',
       '',
       `- Source note: ${sourcePath}`,
       `- Artifact goal: ${options.artifactGoal}`,
@@ -590,10 +852,10 @@ export default class MarktlPlugin extends Plugin {
   private async publishGithubPages(plan: OutputPlan, mappings: ImageAssetMapping[], sourcePath: string, markdown: string, options: ExportOptions, shortId = buildShortId(plan.basename), metadata = this.extractShareMetadata(markdown, plan.basename)): Promise<{ publicUrl: string; shareHomeUrl: string }> {
     const repo = parseRepo(this.settings.githubRepo);
     if (!repo) {
-      throw new Error('GitHub Pages repo is not configured. Use owner/repo in MarkTL settings.');
+      throw new Error('GitHub Pages repo is not configured. Use owner/repo in YSDA Publisher settings.');
     }
     if (!this.settings.githubToken.trim()) {
-      throw new Error('GitHub token is not configured. Add a token with Contents write permission in MarkTL settings.');
+      throw new Error('GitHub token is not configured. Add a token with Contents write permission in YSDA Publisher settings.');
     }
 
     const branch = this.settings.githubBranch.trim() || 'main';
@@ -671,7 +933,7 @@ export default class MarktlPlugin extends Plugin {
     const existing = await this.getGithubJson(owner, repo, branch, indexPath);
     const index = updateShareIndex(existing, entry);
     const html = renderShareIndexHtml(index, {
-      title: this.settings.githubShareHomeTitle || 'MarkTL Shared HTML',
+      title: this.settings.githubShareHomeTitle || 'YSDA Publisher Shared HTML',
       baseUrl: buildShareHomeUrl(pagesBaseUrl, basePath).replace(/\/+$/g, ''),
     });
     await this.putGithubTextFile(owner, repo, branch, indexPath, JSON.stringify(index, null, 2));
@@ -720,7 +982,7 @@ export default class MarktlPlugin extends Plugin {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        message: `Publish MarkTL export ${publishPath}`,
+        message: `Publish YSDA Publisher export ${publishPath}`,
         content: this.arrayBufferToBase64(data),
         branch,
         sha: existingJson?.sha,

@@ -132,7 +132,7 @@ export class MarktlResultModal extends Modal {
 
   private buildAiHandoffPrompt(): string {
     return [
-      'Use this MarkTL HTML artifact as context for the next iteration.',
+      'Use this YSDA Publisher HTML artifact as context for the next iteration.',
       '',
       `Source note: ${this.summary.sourcePath || this.summary.sourceTitle || 'Unknown source note'}`,
       `HTML output: ${this.summary.publicUrl || this.summary.localPath || this.summary.outputPath}`,

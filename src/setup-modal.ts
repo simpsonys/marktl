@@ -16,7 +16,7 @@ export class MarktlSetupModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    this.setTitle('MarkTL setup');
+    this.setTitle('YSDA Publisher setup');
 
     contentEl.createEl('p', {
       cls: 'marktl-modal-intro',
@@ -55,7 +55,7 @@ export class MarktlSetupModal extends Modal {
     const agentBox = contentEl.createDiv({ cls: 'marktl-agent-setup-box' });
     agentBox.createEl('h3', { text: 'Agent-assisted setup' });
     agentBox.createEl('p', {
-      text: 'If you use Codex or Claude Code, copy a setup prompt and let your coding agent configure BRAT, MarkTL, GitHub Pages, and Giscus with you.',
+      text: 'If you use Codex or Claude Code, copy a setup prompt and let your coding agent configure BRAT, YSDA Publisher, GitHub Pages, and Giscus with you.',
     });
     new Setting(agentBox)
       .addButton((button) => button
@@ -83,7 +83,7 @@ export class MarktlSetupModal extends Modal {
           this.plugin.settings.setupCompleted = true;
           await this.plugin.saveSettings();
           this.close();
-          new Notice('MarkTL setup saved.');
+          new Notice('YSDA Publisher setup saved.');
         }));
   }
 
@@ -212,16 +212,16 @@ export class MarktlSetupModal extends Modal {
 function buildAgentSetupPrompt(agent: 'codex' | 'claude'): string {
   const agentName = agent === 'codex' ? 'Codex' : 'Claude Code';
   return [
-    `You are helping me set up the MarkTL Obsidian plugin using ${agentName}.`,
+    `You are helping me set up the YSDA Publisher Obsidian plugin using ${agentName}.`,
     '',
     'Goal:',
-    '- Install MarkTL through BRAT from https://github.com/reallygood83/marktl.',
-    '- Configure MarkTL so an Obsidian Markdown note can be exported to a GitHub Pages HTML link.',
+    '- Install YSDA Publisher through BRAT from the configured plugin repository.',
+    '- Configure YSDA Publisher so an Obsidian Markdown note can be exported to a GitHub Pages HTML link.',
     '- Make the exported page comment-ready with Giscus GitHub comments.',
     '',
     'Please guide me step by step. Do not ask for secrets unless needed, and never print my GitHub token back to me.',
     '',
-    'Target MarkTL settings:',
+    'Target YSDA Publisher settings:',
     '- Share target: GitHub Pages link',
     '- Preview/export: Trusted interactive preview',
     '- Reader feedback: Giscus GitHub comments',
@@ -229,14 +229,14 @@ function buildAgentSetupPrompt(agent: 'codex' | 'claude'): string {
     '- GitHub repository: owner/repo for my Pages repository',
     '- GitHub branch: main',
     '- GitHub Pages base URL: https://owner.github.io/repo',
-    '- Publish path: marktl',
+    '- Publish path: ysda-publisher',
     '- GitHub token: fine-grained token limited to the Pages repo with Contents read/write',
     '- Giscus repository: owner/repo with Discussions enabled',
     '- Giscus category: Announcements or General',
     '- Giscus repo ID and category ID: values from https://giscus.app',
     '',
     'Checklist:',
-    '1. Confirm BRAT has installed and enabled MarkTL.',
+    '1. Confirm BRAT has installed and enabled YSDA Publisher.',
     '2. Confirm the Pages repository exists and GitHub Pages is enabled for the target branch.',
     '3. Confirm the token has Contents read/write only for that repository.',
     '4. Confirm Giscus is enabled and the repo/category IDs are filled.',

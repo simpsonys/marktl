@@ -10,6 +10,14 @@ export type ReaderFeedbackMode = 'none' | 'giscus';
 
 export interface MarktlSettings {
   exportFolder: string;
+  webBookSourceFolder: string;
+  webBookOutputFolder: string;
+  webBookSiteTitle: string;
+  webBookSiteDescription: string;
+  blockedTerms: string;
+  blockedUrlFragments: string;
+  defaultExportVisibility: string;
+  requireReviewedForPublicSafe: boolean;
   setupCompleted: boolean;
   artifactGoal: ArtifactGoal;
   artifactType: ArtifactType;

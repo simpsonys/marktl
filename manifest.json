@@ -1,9 +1,9 @@
 {
   "id": "marktl",
-  "name": "MarkTL HTML Exporter",
+  "name": "YSDA Publisher",
   "version": "0.17.7",
   "minAppVersion": "1.5.0",
-  "description": "Export the current Markdown note to templated HTML and preview it inside Obsidian, with optional AI CLI conversion.",
+  "description": "Export Markdown notes to reviewed, share-ready HTML and static web-book artifacts.",
   "author": "moon",
   "authorUrl": "",
   "isDesktopOnly": true
