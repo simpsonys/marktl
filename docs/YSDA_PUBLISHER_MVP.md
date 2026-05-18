@@ -47,6 +47,62 @@ Then run:
 YSDA Publisher: Export folder as web book
 ```
 
+## Command-line Export
+
+Run the sample export from a terminal:
+
+```bash
+npm run export:webbook:sample
+```
+
+Run with custom source and output folders:
+
+```bash
+npm run export:webbook -- --source sample-notes --output html-exports/ysda-publisher
+```
+
+The CLI defaults are:
+
+- source: `sample-notes`
+- output: `html-exports/ysda-publisher`
+- site title: `YSDA Publisher`
+- default visibility: `public-safe`
+- require reviewed: `true`
+
+Preview the generated static site locally:
+
+```bash
+python3 -m http.server 8080 -d html-exports/ysda-publisher
+```
+
+Then open `http://localhost:8080/`.
+
+Manual safety blocking test:
+
+```bash
+cat > sample-notes/99-block-test.md <<'EOF'
+---
+publish: true
+visibility: public-safe
+reviewed: false
+title: Block Test
+---
+
+# Block Test
+
+This note should be blocked because reviewed is false.
+EOF
+
+npm run export:webbook:sample
+
+grep -R "blocked\|Block Test\|reviewed" -n html-exports/ysda-publisher/safety-report.html html-exports/ysda-publisher/safety-report.json html-exports/ysda-publisher/publish-manifest.json | head -80
+
+rm sample-notes/99-block-test.md
+npm run export:webbook:sample
+```
+
+The blocked count should increase while `99-block-test.md` exists and return to zero after removal.
+
 ## Output Structure
 
 The folder export writes a static artifact:
@@ -91,6 +147,7 @@ The safety report is generated even when all notes pass.
 - Folder export does not publish to GitHub Pages directly; it creates a static folder ready for hosting.
 - Search output is generated and the index has simple filtering, but there is no full search UI yet.
 - Broken non-image links are not deeply diagnosed in this MVP.
+- Command-line export cleans the output folder before writing so stale page files from removed source notes do not remain.
 
 ## Next Milestone
 

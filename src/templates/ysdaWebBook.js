@@ -104,7 +104,7 @@ function renderSafetyReport(report, options = {}) {
   const skipped = Array.isArray(report.skipped) ? report.skipped : [];
   const rows = skipped.map((item) => `<tr>
     <td>${escapeHtml(item.status || 'skipped')}</td>
-    <td>${escapeHtml(item.sourcePath || '')}</td>
+    <td>${escapeHtml([item.title, item.sourcePath].filter(Boolean).join(' - '))}</td>
     <td>${escapeHtml((item.reasons || []).join('; '))}</td>
   </tr>`).join('\n');
 

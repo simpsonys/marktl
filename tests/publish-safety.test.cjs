@@ -1,9 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const { buildPublishManifest } = require('../src/core/publishManifest.js');
 const { evaluatePublishSafety, parseFrontmatter } = require('../src/core/publishSafety.js');
 const { buildSearchEntry } = require('../src/core/searchIndex.js');
+const { createNodeWebBookAdapter, exportWebBook } = require('../src/core/webBookExport.js');
 const { renderSafetyReport, renderWebBookIndex, renderWebBookPage } = require('../src/templates/ysdaWebBook.js');
 
 test('parses simple publish frontmatter values', () => {
@@ -35,7 +39,7 @@ Readable note.
     requireReviewedForPublicSafe: true,
   });
   assert.equal(unreviewed.allowed, false);
-  assert.equal(unreviewed.status, 'skipped');
+  assert.equal(unreviewed.status, 'blocked');
   assert.match(unreviewed.reasons.join('\n'), /reviewed: true/);
 
   const unpublished = evaluatePublishSafety('# No frontmatter', {});
@@ -101,4 +105,78 @@ test('renders web book index, page, safety report, search entry, and manifest', 
   assert.equal(search.url, page.url);
   assert.equal(manifest.tool, 'YSDA Publisher');
   assert.equal(manifest.exportedCount, 1);
+});
+
+test('core web book export writes required files, blocks unreviewed notes, and cleans stale output', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ysda-webbook-'));
+  try {
+    const source = path.join(root, 'notes');
+    const output = path.join(root, 'out');
+    fs.mkdirSync(source, { recursive: true });
+    fs.mkdirSync(path.join(output, 'pages', 'stale'), { recursive: true });
+    fs.writeFileSync(path.join(output, 'pages', 'stale', 'index.html'), '<h1>stale</h1>');
+
+    fs.writeFileSync(path.join(source, 'safe.md'), `---
+publish: true
+visibility: public-safe
+reviewed: true
+tags: [study]
+title: Safe Note
+---
+
+# Safe Note
+
+This reviewed note should export.
+`);
+    fs.writeFileSync(path.join(source, 'blocked.md'), `---
+publish: true
+visibility: public-safe
+reviewed: false
+title: Block Test
+---
+
+# Block Test
+
+This note should be blocked.
+`);
+    fs.writeFileSync(path.join(source, 'draft.md'), `---
+publish: false
+visibility: public-safe
+reviewed: true
+title: Draft Note
+---
+
+# Draft Note
+`);
+
+    const result = await exportWebBook({
+      sourceFolder: 'notes',
+      outputFolder: 'out',
+      adapter: createNodeWebBookAdapter(fs, root),
+      generatedAt: '2026-05-18T00:00:00.000Z',
+      requireReviewedForPublicSafe: true,
+      defaultVisibility: 'public-safe',
+    });
+
+    assert.equal(result.exportedCount, 1);
+    assert.equal(result.blockedCount, 1);
+    assert.equal(result.skippedCount, 1);
+
+    for (const required of ['.nojekyll', 'index.html', 'search.json', 'publish-manifest.json', 'safety-report.html', 'safety-report.json']) {
+      assert.equal(fs.existsSync(path.join(output, required)), true, `${required} should exist`);
+    }
+    assert.equal(fs.existsSync(path.join(output, 'pages', 'stale', 'index.html')), false);
+
+    const search = JSON.parse(fs.readFileSync(path.join(output, 'search.json'), 'utf8'));
+    assert.deepEqual(search.map((entry) => entry.title), ['Safe Note']);
+
+    const manifest = JSON.parse(fs.readFileSync(path.join(output, 'publish-manifest.json'), 'utf8'));
+    assert.equal(manifest.exportedCount, 1);
+    assert.equal(manifest.blockedCount, 1);
+    assert.equal(manifest.skippedCount, 1);
+    assert.equal(manifest.skipped.some((item) => item.sourcePath.endsWith('blocked.md') && item.status === 'blocked'), true);
+    assert.equal(manifest.skipped.some((item) => item.sourcePath.endsWith('draft.md') && item.status === 'skipped'), true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

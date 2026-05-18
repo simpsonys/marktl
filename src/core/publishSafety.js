@@ -59,7 +59,7 @@ function evaluatePublishSafety(markdown, options = {}) {
     warnings.push(`Local image references must be bundled: ${localImages.join(', ')}`);
   }
 
-  const blocked = reasons.some((reason) => /Blocked|Internal-looking|script|iframe|javascript|event handlers/i.test(reason));
+  const blocked = reasons.some((reason) => /Blocked|Internal-looking|script|iframe|javascript|event handlers|require reviewed/i.test(reason));
   const allowed = reasons.length === 0;
 
   return {

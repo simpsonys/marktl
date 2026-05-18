@@ -15,13 +15,10 @@ const { injectReaderFeedback, shouldAttachReaderFeedback, validateGiscusConfig }
 const { buildPagesUrl, buildPublishPath, buildShareHomeUrl, buildShortPagesUrl, inferPagesBaseUrl, parseRepo, renderShareIndexHtml, updateShareIndex } = require('./core/github-pages.js');
 const { validateHtmlArtifact } = require('./core/html-qa.js');
 const { slugify } = require('./core/html.js');
-const { buildPublishManifest } = require('./core/publishManifest.js');
-const { evaluatePublishSafety } = require('./core/publishSafety.js');
 const { migrateSettings } = require('./core/settings.js');
-const { buildSearchEntry } = require('./core/searchIndex.js');
 const { buildShortId, injectSocialMeta } = require('./core/social.js');
 const { applyPresetToOptions } = require('./core/presets.js');
-const { renderSafetyReport, renderWebBookIndex, renderWebBookPage } = require('./templates/ysdaWebBook.js');
+const { exportWebBook } = require('./core/webBookExport.js');
 
 const DEFAULT_SETTINGS: MarktlSettings = {
   exportFolder: 'html-exports',
@@ -376,166 +373,31 @@ export default class MarktlPlugin extends Plugin {
     }
 
     const outputFolder = normalizePath(this.settings.webBookOutputFolder.trim() || DEFAULT_SETTINGS.webBookOutputFolder);
-    const markdownFiles = this.app.vault.getFiles()
-      .filter((file) => file.extension === 'md' && this.isInFolder(file.path, sourceFolder))
-      .sort((a, b) => a.path.localeCompare(b.path));
-
-    if (markdownFiles.length === 0) {
-      new Notice(`No Markdown notes found under ${sourceFolder}.`);
-      return;
-    }
-
     const progress = new MarktlProgressModal(this.app);
     progress.open();
-    progress.addStep(`Source folder: ${sourceFolder}`);
-    progress.addStep(`Output folder: ${outputFolder}`);
-    progress.addStep(`Scanning ${markdownFiles.length} Markdown note(s)...`);
-
-    const generatedAt = new Date().toISOString();
-    const pages: Array<any> = [];
-    const skipped: Array<any> = [];
-    const warnings: string[] = [];
-    const searchEntries: Array<any> = [];
-    const slugCounts = new Map<string, number>();
-    const usedAssetNamesBySlug = new Map<string, Set<string>>();
 
     try {
-      await this.ensureFolder(outputFolder);
-      await this.app.vault.adapter.write(normalizePath(`${outputFolder}/.nojekyll`), '');
-
-      for (const file of markdownFiles) {
-        progress.addStep(`Checking ${file.path}...`);
-        const markdown = await this.app.vault.read(file);
-        const safety = evaluatePublishSafety(markdown, {
-          sourcePath: file.path,
-          defaultVisibility: this.settings.defaultExportVisibility,
-          requireReviewedForPublicSafe: this.settings.requireReviewedForPublicSafe,
-          blockedTerms: this.linesFromSetting(this.settings.blockedTerms),
-          blockedUrlFragments: this.linesFromSetting(this.settings.blockedUrlFragments),
-        });
-
-        if (!safety.allowed) {
-          skipped.push({
-            sourcePath: file.path,
-            status: safety.status,
-            reasons: safety.reasons,
-            warnings: safety.warnings,
-          });
-          continue;
-        }
-
-        const slug = this.buildWebBookSlug(file.path, sourceFolder, safety.metadata.title, slugCounts);
-        const pageFolder = normalizePath(`${outputFolder}/pages/${slug}`);
-        const assetPlan: OutputPlan = {
-          folder: outputFolder,
-          basename: slug,
-          outputPath: normalizePath(`${pageFolder}/index.html`),
-          assetFolder: normalizePath(`${pageFolder}/assets`),
-          assetRelativePrefix: 'assets',
-        };
-        const assetResult = await this.resolveImageAssets(markdown, file, assetPlan);
-        if (assetResult.warnings.length > 0) {
-          skipped.push({
-            sourcePath: file.path,
-            status: 'blocked',
-            reasons: assetResult.warnings,
-            warnings: safety.warnings,
-          });
-          continue;
-        }
-
-        const converted = convertMarkdownToHtml(markdown, {
-          template: 'ysda-web-book',
-          trusted: false,
-          sourcePath: file.path,
-        });
-        const articleHtml = this.extractArticleHtml(rewriteHtmlImageSources(converted, assetResult.mappings));
-        const pageUrl = `pages/${slug}/`;
-        const pageRecord = {
-          title: safety.metadata.title,
-          slug,
-          url: pageUrl,
-          sourcePath: file.path,
-          tags: safety.metadata.tags,
-          visibility: safety.metadata.visibility,
-          updatedAt: file.stat?.mtime ? new Date(file.stat.mtime).toISOString() : generatedAt,
-          summary: safety.metadata.summary,
-          readingTimeMinutes: Math.max(1, Math.ceil(String(safety.body || markdown).split(/\s+/).filter(Boolean).length / 220)),
-          warnings: [...safety.warnings],
-        };
-
-        pages.push(pageRecord);
-        searchEntries.push(buildSearchEntry(pageRecord, safety.body || markdown));
-        usedAssetNamesBySlug.set(slug, new Set(assetResult.mappings.map((mapping) => mapping.destinationPath)));
-        await this.copyImageAssets(assetResult.mappings);
-        await this.ensureParentFolder(assetPlan.outputPath);
-        await this.app.vault.adapter.write(assetPlan.outputPath, renderWebBookPage({
-          ...pageRecord,
-          articleHtml,
-          generatedAt,
-          siteTitle: this.settings.webBookSiteTitle || 'YSDA Publisher',
-        }));
-      }
-
-      const orderedPages = pages.map((page, index) => ({
-        ...page,
-        previous: index > 0 ? pages[index - 1] : null,
-        next: index < pages.length - 1 ? pages[index + 1] : null,
-      }));
-      for (const page of orderedPages) {
-        const htmlPath = normalizePath(`${outputFolder}/${page.url}index.html`);
-        const current = await this.app.vault.adapter.read(htmlPath);
-        await this.app.vault.adapter.write(htmlPath, renderWebBookPage({
-          ...page,
-          articleHtml: this.extractArticleHtml(current),
-          generatedAt,
-          siteTitle: this.settings.webBookSiteTitle || 'YSDA Publisher',
-        }));
-      }
-
-      const manifest = buildPublishManifest({
-        generatedAt,
+      const result = await exportWebBook({
         sourceFolder,
         outputFolder,
-        pages,
-        skipped,
-        warnings,
-      });
-      const safetyReport = {
-        generatedAt,
-        sourceFolder,
-        outputFolder,
-        summary: {
-          exportedCount: pages.length,
-          skippedCount: skipped.filter((item) => item.status !== 'blocked').length,
-          blockedCount: skipped.filter((item) => item.status === 'blocked').length,
-        },
-        pages,
-        skipped,
-        warnings,
-      };
-
-      await this.app.vault.adapter.write(normalizePath(`${outputFolder}/search.json`), JSON.stringify(searchEntries, null, 2));
-      await this.app.vault.adapter.write(normalizePath(`${outputFolder}/publish-manifest.json`), JSON.stringify(manifest, null, 2));
-      await this.app.vault.adapter.write(normalizePath(`${outputFolder}/safety-report.json`), JSON.stringify(safetyReport, null, 2));
-      await this.app.vault.adapter.write(normalizePath(`${outputFolder}/safety-report.html`), renderSafetyReport(safetyReport, {
-        siteTitle: this.settings.webBookSiteTitle || 'YSDA Publisher',
-      }));
-      await this.app.vault.adapter.write(normalizePath(`${outputFolder}/index.html`), renderWebBookIndex({
         siteTitle: this.settings.webBookSiteTitle || 'YSDA Publisher',
         siteDescription: this.settings.webBookSiteDescription || DEFAULT_SETTINGS.webBookSiteDescription,
-        generatedAt,
-        pages,
-        skipped,
-        warnings,
-      }));
+        defaultVisibility: this.settings.defaultExportVisibility,
+        requireReviewedForPublicSafe: this.settings.requireReviewedForPublicSafe,
+        blockedTerms: this.linesFromSetting(this.settings.blockedTerms),
+        blockedUrlFragments: this.linesFromSetting(this.settings.blockedUrlFragments),
+        adapter: this.createVaultWebBookAdapter(),
+        onProgress: (message: string) => progress.addStep(message),
+      });
 
-      const skippedCount = skipped.length;
-      progress.complete(`Web book exported: ${pages.length} page(s), ${skippedCount} skipped/blocked.`);
-      new Notice(`YSDA Publisher web book exported to ${outputFolder}.`);
-      if (usedAssetNamesBySlug.size === 0) {
-        progress.addStep('No local image assets were bundled.');
+      if (result.pages.length === 0 && result.skipped.length === 0) {
+        progress.complete(`No Markdown notes found under ${sourceFolder}.`);
+        new Notice(`No Markdown notes found under ${sourceFolder}.`);
+        return;
       }
+
+      progress.complete(`Web book exported: ${result.exportedCount} page(s), ${result.skippedCount} skipped, ${result.blockedCount} blocked.`);
+      new Notice(`YSDA Publisher web book exported to ${outputFolder}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       progress.fail(message);
@@ -786,6 +648,52 @@ export default class MarktlPlugin extends Plugin {
       return;
     }
     await this.ensureParentFolder(`${normalized}/.keep`);
+  }
+
+  private createVaultWebBookAdapter(): Record<string, unknown> {
+    const adapter = this.app.vault.adapter as typeof this.app.vault.adapter & {
+      rmdir?: (path: string, recursive?: boolean) => Promise<void>;
+    };
+
+    return {
+      listMarkdownFiles: async (sourceFolder: string) => this.app.vault.getFiles()
+        .filter((file) => file.extension === 'md' && this.isInFolder(file.path, sourceFolder))
+        .map((file) => ({ path: file.path, mtime: file.stat?.mtime })),
+      readText: async (filePath: string) => {
+        const file = this.app.vault.getAbstractFileByPath(normalizePath(filePath));
+        if (!(file instanceof TFile)) {
+          throw new Error(`Markdown note not found: ${filePath}`);
+        }
+        return this.app.vault.read(file);
+      },
+      writeText: async (filePath: string, text: string) => {
+        await this.ensureParentFolder(filePath);
+        await this.app.vault.adapter.write(normalizePath(filePath), text);
+      },
+      readBinary: async (filePath: string) => this.app.vault.adapter.readBinary(normalizePath(filePath)),
+      writeBinary: async (filePath: string, data: ArrayBuffer) => {
+        await this.ensureParentFolder(filePath);
+        await this.app.vault.adapter.writeBinary(normalizePath(filePath), data);
+      },
+      ensureDir: async (folderPath: string) => this.ensureFolder(folderPath),
+      removeDir: async (folderPath: string) => {
+        const normalized = normalizePath(folderPath);
+        if (!normalized || !(await this.app.vault.adapter.exists(normalized))) {
+          return;
+        }
+        if (adapter.rmdir) {
+          await adapter.rmdir(normalized, true);
+        }
+      },
+      resolveAsset: async (target: string, sourcePath: string) => {
+        const source = this.app.vault.getAbstractFileByPath(normalizePath(sourcePath));
+        if (!(source instanceof TFile)) {
+          return null;
+        }
+        const imageFile = this.resolveImageFile(target, source);
+        return imageFile ? { path: imageFile.path } : null;
+      },
+    };
   }
 
   private linesFromSetting(value: string): string[] {

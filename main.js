@@ -1916,11 +1916,98 @@ var require_html_qa = __commonJS({
   }
 });
 
+// src/core/settings.js
+var require_settings = __commonJS({
+  "src/core/settings.js"(exports2, module2) {
+    "use strict";
+    function firstString(...values) {
+      for (const value of values) {
+        if (typeof value === "string" && value.trim()) {
+          return value.trim();
+        }
+      }
+      return "";
+    }
+    function migrateSettings2(defaultSettings, rawSettings) {
+      const raw = rawSettings && typeof rawSettings === "object" ? rawSettings : {};
+      const settings = Object.assign({}, defaultSettings, raw);
+      let migrated = false;
+      const legacyRepo = firstString(raw.githubRepository, raw.repository);
+      if (!firstString(settings.githubRepo) && legacyRepo) {
+        settings.githubRepo = legacyRepo;
+        migrated = true;
+      }
+      const legacyPublishPath = firstString(raw.publishPath, raw.githubPath);
+      if ((!firstString(settings.githubPublishPath) || settings.githubPublishPath === defaultSettings.githubPublishPath) && legacyPublishPath) {
+        settings.githubPublishPath = legacyPublishPath;
+        migrated = true;
+      }
+      const legacyShareHomeTitle = firstString(raw.shareHomeTitle);
+      if ((!firstString(settings.githubShareHomeTitle) || settings.githubShareHomeTitle === defaultSettings.githubShareHomeTitle) && legacyShareHomeTitle) {
+        settings.githubShareHomeTitle = legacyShareHomeTitle;
+        migrated = true;
+      }
+      return { settings, migrated };
+    }
+    module2.exports = {
+      migrateSettings: migrateSettings2
+    };
+  }
+});
+
+// src/core/social.js
+var require_social = __commonJS({
+  "src/core/social.js"(exports2, module2) {
+    "use strict";
+    var { escapeHtml } = require_html();
+    function buildShortId2(value) {
+      let hash = 2166136261;
+      for (const char of String(value || "")) {
+        hash ^= char.codePointAt(0) || 0;
+        hash = Math.imul(hash, 16777619);
+      }
+      return Math.abs(hash >>> 0).toString(36).slice(0, 7) || "doc";
+    }
+    function injectSocialMeta2(html, options = {}) {
+      const title = options.title || "YSDA Publisher HTML artifact";
+      const description = options.description || "A shared HTML document generated with YSDA Publisher.";
+      const url = options.url || "";
+      const image = options.image || "";
+      const tags = [
+        `<meta property="og:type" content="article">`,
+        `<meta property="og:title" content="${escapeAttr(title)}">`,
+        `<meta property="og:description" content="${escapeAttr(description)}">`,
+        url ? `<meta property="og:url" content="${escapeAttr(url)}">` : "",
+        image ? `<meta property="og:image" content="${escapeAttr(image)}">` : "",
+        `<meta name="twitter:card" content="${image ? "summary_large_image" : "summary"}">`,
+        `<meta name="twitter:title" content="${escapeAttr(title)}">`,
+        `<meta name="twitter:description" content="${escapeAttr(description)}">`,
+        image ? `<meta name="twitter:image" content="${escapeAttr(image)}">` : "",
+        url ? `<link rel="canonical" href="${escapeAttr(url)}">` : ""
+      ].filter(Boolean).join("\n");
+      const value = String(html || "");
+      if (/<\/head>/i.test(value)) {
+        return value.replace(/<\/head>/i, `${tags}
+</head>`);
+      }
+      return `${tags}
+${value}`;
+    }
+    function escapeAttr(value) {
+      return escapeHtml(String(value || "")).replace(/"/g, "&quot;");
+    }
+    module2.exports = {
+      buildShortId: buildShortId2,
+      injectSocialMeta: injectSocialMeta2
+    };
+  }
+});
+
 // src/core/publishManifest.js
 var require_publishManifest = __commonJS({
   "src/core/publishManifest.js"(exports2, module2) {
     "use strict";
-    function buildPublishManifest2(input) {
+    function buildPublishManifest(input) {
       const skipped = Array.isArray(input.skipped) ? input.skipped : [];
       const pages = Array.isArray(input.pages) ? input.pages : [];
       return {
@@ -1937,7 +2024,7 @@ var require_publishManifest = __commonJS({
       };
     }
     module2.exports = {
-      buildPublishManifest: buildPublishManifest2
+      buildPublishManifest
     };
   }
 });
@@ -1955,7 +2042,7 @@ var require_publishSafety = __commonJS({
       "\uBE44\uACF5\uAC1C",
       "\uB300\uC678\uBE44"
     ];
-    function evaluatePublishSafety2(markdown, options = {}) {
+    function evaluatePublishSafety(markdown, options = {}) {
       const sourcePath = options.sourcePath || "";
       const parsed = splitFrontmatter(markdown);
       const frontmatter = parseFrontmatter(parsed.frontmatter);
@@ -1995,7 +2082,7 @@ var require_publishSafety = __commonJS({
       if (localImages.length > 0) {
         warnings.push(`Local image references must be bundled: ${localImages.join(", ")}`);
       }
-      const blocked = reasons.some((reason) => /Blocked|Internal-looking|script|iframe|javascript|event handlers/i.test(reason));
+      const blocked = reasons.some((reason) => /Blocked|Internal-looking|script|iframe|javascript|event handlers|require reviewed/i.test(reason));
       const allowed = reasons.length === 0;
       return {
         allowed,
@@ -2094,47 +2181,8 @@ var require_publishSafety = __commonJS({
     }
     module2.exports = {
       buildSummary,
-      evaluatePublishSafety: evaluatePublishSafety2,
+      evaluatePublishSafety,
       parseFrontmatter
-    };
-  }
-});
-
-// src/core/settings.js
-var require_settings = __commonJS({
-  "src/core/settings.js"(exports2, module2) {
-    "use strict";
-    function firstString(...values) {
-      for (const value of values) {
-        if (typeof value === "string" && value.trim()) {
-          return value.trim();
-        }
-      }
-      return "";
-    }
-    function migrateSettings2(defaultSettings, rawSettings) {
-      const raw = rawSettings && typeof rawSettings === "object" ? rawSettings : {};
-      const settings = Object.assign({}, defaultSettings, raw);
-      let migrated = false;
-      const legacyRepo = firstString(raw.githubRepository, raw.repository);
-      if (!firstString(settings.githubRepo) && legacyRepo) {
-        settings.githubRepo = legacyRepo;
-        migrated = true;
-      }
-      const legacyPublishPath = firstString(raw.publishPath, raw.githubPath);
-      if ((!firstString(settings.githubPublishPath) || settings.githubPublishPath === defaultSettings.githubPublishPath) && legacyPublishPath) {
-        settings.githubPublishPath = legacyPublishPath;
-        migrated = true;
-      }
-      const legacyShareHomeTitle = firstString(raw.shareHomeTitle);
-      if ((!firstString(settings.githubShareHomeTitle) || settings.githubShareHomeTitle === defaultSettings.githubShareHomeTitle) && legacyShareHomeTitle) {
-        settings.githubShareHomeTitle = legacyShareHomeTitle;
-        migrated = true;
-      }
-      return { settings, migrated };
-    }
-    module2.exports = {
-      migrateSettings: migrateSettings2
     };
   }
 });
@@ -2144,7 +2192,7 @@ var require_searchIndex = __commonJS({
   "src/core/searchIndex.js"(exports2, module2) {
     "use strict";
     var { buildSummary } = require_publishSafety();
-    function buildSearchEntry2(page, markdown) {
+    function buildSearchEntry(page, markdown) {
       return {
         title: String(page.title || ""),
         url: String(page.url || ""),
@@ -2156,55 +2204,7 @@ var require_searchIndex = __commonJS({
       };
     }
     module2.exports = {
-      buildSearchEntry: buildSearchEntry2
-    };
-  }
-});
-
-// src/core/social.js
-var require_social = __commonJS({
-  "src/core/social.js"(exports2, module2) {
-    "use strict";
-    var { escapeHtml } = require_html();
-    function buildShortId2(value) {
-      let hash = 2166136261;
-      for (const char of String(value || "")) {
-        hash ^= char.codePointAt(0) || 0;
-        hash = Math.imul(hash, 16777619);
-      }
-      return Math.abs(hash >>> 0).toString(36).slice(0, 7) || "doc";
-    }
-    function injectSocialMeta2(html, options = {}) {
-      const title = options.title || "YSDA Publisher HTML artifact";
-      const description = options.description || "A shared HTML document generated with YSDA Publisher.";
-      const url = options.url || "";
-      const image = options.image || "";
-      const tags = [
-        `<meta property="og:type" content="article">`,
-        `<meta property="og:title" content="${escapeAttr(title)}">`,
-        `<meta property="og:description" content="${escapeAttr(description)}">`,
-        url ? `<meta property="og:url" content="${escapeAttr(url)}">` : "",
-        image ? `<meta property="og:image" content="${escapeAttr(image)}">` : "",
-        `<meta name="twitter:card" content="${image ? "summary_large_image" : "summary"}">`,
-        `<meta name="twitter:title" content="${escapeAttr(title)}">`,
-        `<meta name="twitter:description" content="${escapeAttr(description)}">`,
-        image ? `<meta name="twitter:image" content="${escapeAttr(image)}">` : "",
-        url ? `<link rel="canonical" href="${escapeAttr(url)}">` : ""
-      ].filter(Boolean).join("\n");
-      const value = String(html || "");
-      if (/<\/head>/i.test(value)) {
-        return value.replace(/<\/head>/i, `${tags}
-</head>`);
-      }
-      return `${tags}
-${value}`;
-    }
-    function escapeAttr(value) {
-      return escapeHtml(String(value || "")).replace(/"/g, "&quot;");
-    }
-    module2.exports = {
-      buildShortId: buildShortId2,
-      injectSocialMeta: injectSocialMeta2
+      buildSearchEntry
     };
   }
 });
@@ -2214,7 +2214,7 @@ var require_ysdaWebBook = __commonJS({
   "src/templates/ysdaWebBook.js"(exports2, module2) {
     "use strict";
     var { escapeHtml, slugify: slugify2 } = require_html();
-    function renderWebBookPage2(input) {
+    function renderWebBookPage(input) {
       const article = addHeadingAnchors(String(input.articleHtml || ""));
       const toc = buildToc(article.headings);
       const tags = renderTags(input.tags);
@@ -2254,7 +2254,7 @@ ${article.html}
 </body>
 </html>`;
     }
-    function renderWebBookIndex2(input) {
+    function renderWebBookIndex(input) {
       const pages = Array.isArray(input.pages) ? input.pages : [];
       const skipped = Array.isArray(input.skipped) ? input.skipped : [];
       const blocked = skipped.filter((item) => item.status === "blocked").length;
@@ -2309,12 +2309,12 @@ input?.addEventListener('input', () => {
 </body>
 </html>`;
     }
-    function renderSafetyReport2(report, options = {}) {
+    function renderSafetyReport(report, options = {}) {
       const pages = Array.isArray(report.pages) ? report.pages : [];
       const skipped = Array.isArray(report.skipped) ? report.skipped : [];
       const rows = skipped.map((item) => `<tr>
     <td>${escapeHtml(item.status || "skipped")}</td>
-    <td>${escapeHtml(item.sourcePath || "")}</td>
+    <td>${escapeHtml([item.title, item.sourcePath].filter(Boolean).join(" - "))}</td>
     <td>${escapeHtml((item.reasons || []).join("; "))}</td>
   </tr>`).join("\n");
       return `<!doctype html>
@@ -2429,9 +2429,413 @@ footer{text-align:center;color:#64748b;padding:26px}
 `;
     }
     module2.exports = {
-      renderSafetyReport: renderSafetyReport2,
-      renderWebBookIndex: renderWebBookIndex2,
-      renderWebBookPage: renderWebBookPage2
+      renderSafetyReport,
+      renderWebBookIndex,
+      renderWebBookPage
+    };
+  }
+});
+
+// src/core/webBookExport.js
+var require_webBookExport = __commonJS({
+  "src/core/webBookExport.js"(exports2, module2) {
+    "use strict";
+    var path = require("node:path");
+    var { buildAssetFileName: buildAssetFileName2, extractMarkdownImageReferences: extractMarkdownImageReferences2, rewriteHtmlImageSources: rewriteHtmlImageSources2 } = require_assets();
+    var { convertMarkdownToHtml: convertMarkdownToHtml2 } = require_converter();
+    var { slugify: slugify2 } = require_html();
+    var { buildPublishManifest } = require_publishManifest();
+    var { evaluatePublishSafety } = require_publishSafety();
+    var { buildSearchEntry } = require_searchIndex();
+    var { renderSafetyReport, renderWebBookIndex, renderWebBookPage } = require_ysdaWebBook();
+    var DEFAULT_WEB_BOOK_OPTIONS = {
+      sourceFolder: "sample-notes",
+      outputFolder: "html-exports/ysda-publisher",
+      siteTitle: "YSDA Publisher",
+      siteDescription: "Reviewed Markdown notes published as a static web book.",
+      defaultVisibility: "public-safe",
+      requireReviewedForPublicSafe: true,
+      blockedTerms: [
+        "CONFIDENTIAL",
+        "INTERNAL ONLY",
+        "DO NOT PUBLISH",
+        "\uBE44\uACF5\uAC1C",
+        "\uB300\uC678\uBE44"
+      ],
+      blockedUrlFragments: [
+        ".local",
+        ".internal",
+        "intranet",
+        "localhost"
+      ],
+      cleanOutput: true
+    };
+    async function exportWebBook2(options = {}) {
+      const adapter = options.adapter;
+      if (!adapter) {
+        throw new Error("exportWebBook requires an adapter.");
+      }
+      const config = {
+        ...DEFAULT_WEB_BOOK_OPTIONS,
+        ...options,
+        blockedTerms: normalizeList(options.blockedTerms, DEFAULT_WEB_BOOK_OPTIONS.blockedTerms),
+        blockedUrlFragments: normalizeList(options.blockedUrlFragments, DEFAULT_WEB_BOOK_OPTIONS.blockedUrlFragments),
+        requireReviewedForPublicSafe: parseBooleanOption(options.requireReviewedForPublicSafe, DEFAULT_WEB_BOOK_OPTIONS.requireReviewedForPublicSafe),
+        cleanOutput: parseBooleanOption(options.cleanOutput, DEFAULT_WEB_BOOK_OPTIONS.cleanOutput)
+      };
+      const sourceFolder = normalizePath2(config.sourceFolder);
+      const outputFolder = normalizePath2(config.outputFolder);
+      const generatedAt = config.generatedAt || (/* @__PURE__ */ new Date()).toISOString();
+      const progress = typeof config.onProgress === "function" ? config.onProgress : () => {
+      };
+      if (!sourceFolder) {
+        throw new Error("Source folder is required.");
+      }
+      if (!outputFolder) {
+        throw new Error("Output folder is required.");
+      }
+      progress(`Source folder: ${sourceFolder}`);
+      progress(`Output folder: ${outputFolder}`);
+      if (config.cleanOutput && adapter.removeDir) {
+        await adapter.removeDir(outputFolder);
+      }
+      await adapter.ensureDir(outputFolder);
+      await adapter.writeText(joinPath(outputFolder, ".nojekyll"), "");
+      const markdownFiles = (await adapter.listMarkdownFiles(sourceFolder)).map((file) => ({
+        path: normalizePath2(file.path || file),
+        mtime: file.mtime
+      })).sort((left, right) => left.path.localeCompare(right.path));
+      progress(`Scanning ${markdownFiles.length} Markdown note(s)...`);
+      const pages = [];
+      const skipped = [];
+      const warnings = [];
+      const searchEntries = [];
+      const pageHtmlBySlug = /* @__PURE__ */ new Map();
+      const slugCounts = /* @__PURE__ */ new Map();
+      for (const file of markdownFiles) {
+        progress(`Checking ${file.path}...`);
+        const markdown = await adapter.readText(file.path);
+        const safety = evaluatePublishSafety(markdown, {
+          sourcePath: file.path,
+          defaultVisibility: config.defaultVisibility,
+          requireReviewedForPublicSafe: config.requireReviewedForPublicSafe,
+          blockedTerms: config.blockedTerms,
+          blockedUrlFragments: config.blockedUrlFragments
+        });
+        if (!safety.allowed) {
+          skipped.push({
+            title: safety.metadata.title,
+            sourcePath: file.path,
+            status: safety.status,
+            visibility: safety.metadata.visibility,
+            reasons: safety.reasons,
+            warnings: safety.warnings
+          });
+          continue;
+        }
+        const slug = buildWebBookSlug(file.path, sourceFolder, safety.metadata.title, slugCounts);
+        const pageFolder = joinPath(outputFolder, "pages", slug);
+        const assetFolder = joinPath(pageFolder, "assets");
+        const assetResult = await resolveImageAssets(markdown, {
+          sourcePath: file.path,
+          assetFolder,
+          assetRelativePrefix: "assets",
+          adapter
+        });
+        if (assetResult.warnings.length > 0) {
+          skipped.push({
+            title: safety.metadata.title,
+            sourcePath: file.path,
+            status: "blocked",
+            visibility: safety.metadata.visibility,
+            reasons: assetResult.warnings,
+            warnings: safety.warnings
+          });
+          continue;
+        }
+        const converted = convertMarkdownToHtml2(markdown, {
+          template: "ysda-web-book",
+          trusted: false,
+          sourcePath: file.path
+        });
+        const articleHtml = extractArticleHtml(rewriteHtmlImageSources2(converted, assetResult.mappings));
+        const pageUrl = `pages/${slug}/`;
+        const pageRecord = {
+          title: safety.metadata.title,
+          slug,
+          url: pageUrl,
+          sourcePath: file.path,
+          tags: safety.metadata.tags,
+          visibility: safety.metadata.visibility,
+          updatedAt: file.mtime ? new Date(file.mtime).toISOString() : generatedAt,
+          summary: safety.metadata.summary,
+          readingTimeMinutes: estimateReadingTime(safety.body || markdown),
+          warnings: [...safety.warnings]
+        };
+        pages.push(pageRecord);
+        searchEntries.push(buildSearchEntry(pageRecord, safety.body || markdown));
+        pageHtmlBySlug.set(slug, articleHtml);
+        await copyImageAssets(assetResult.mappings, adapter);
+      }
+      for (const [index, page] of pages.entries()) {
+        const pagePath = joinPath(outputFolder, page.url, "index.html");
+        await adapter.writeText(pagePath, renderWebBookPage({
+          ...page,
+          previous: index > 0 ? pages[index - 1] : null,
+          next: index < pages.length - 1 ? pages[index + 1] : null,
+          articleHtml: pageHtmlBySlug.get(page.slug) || "",
+          generatedAt,
+          siteTitle: config.siteTitle
+        }));
+      }
+      const manifest = buildPublishManifest({
+        generatedAt,
+        sourceFolder,
+        outputFolder,
+        pages,
+        skipped,
+        warnings
+      });
+      const safetyReport = {
+        generatedAt,
+        sourceFolder,
+        outputFolder,
+        summary: {
+          exportedCount: pages.length,
+          skippedCount: skipped.filter((item) => item.status !== "blocked").length,
+          blockedCount: skipped.filter((item) => item.status === "blocked").length
+        },
+        pages,
+        skipped,
+        warnings
+      };
+      await adapter.writeText(joinPath(outputFolder, "search.json"), JSON.stringify(searchEntries, null, 2));
+      await adapter.writeText(joinPath(outputFolder, "publish-manifest.json"), JSON.stringify(manifest, null, 2));
+      await adapter.writeText(joinPath(outputFolder, "safety-report.json"), JSON.stringify(safetyReport, null, 2));
+      await adapter.writeText(joinPath(outputFolder, "safety-report.html"), renderSafetyReport(safetyReport, {
+        siteTitle: config.siteTitle
+      }));
+      await adapter.writeText(joinPath(outputFolder, "index.html"), renderWebBookIndex({
+        siteTitle: config.siteTitle,
+        siteDescription: config.siteDescription,
+        generatedAt,
+        pages,
+        skipped,
+        warnings
+      }));
+      return {
+        generatedAt,
+        sourceFolder,
+        outputFolder,
+        exportedCount: manifest.exportedCount,
+        skippedCount: manifest.skippedCount,
+        blockedCount: manifest.blockedCount,
+        pages,
+        skipped,
+        warnings,
+        manifest,
+        safetyReport,
+        searchEntries
+      };
+    }
+    async function resolveImageAssets(markdown, options) {
+      const references = extractMarkdownImageReferences2(markdown);
+      const warnings = [];
+      const mappings = [];
+      const usedNames = /* @__PURE__ */ new Set();
+      for (const reference of references) {
+        const target = String(reference.target || "");
+        const resolved = await options.adapter.resolveAsset(target, options.sourcePath);
+        if (!resolved) {
+          warnings.push(`Image asset not found: ${target}`);
+          continue;
+        }
+        const assetFileName = buildAssetFileName2(resolved.path, mappings.length + 1, usedNames);
+        const destinationPath = joinPath(options.assetFolder, assetFileName);
+        const relativeSrc = encodeURI(joinPath(options.assetRelativePrefix, assetFileName));
+        mappings.push({
+          original: target,
+          sourcePath: resolved.path,
+          destinationPath,
+          relativeSrc,
+          aliases: [
+            target,
+            String(reference.raw || ""),
+            resolved.path,
+            path.basename(resolved.path),
+            normalizePath2(target)
+          ]
+        });
+      }
+      return { mappings, warnings };
+    }
+    async function copyImageAssets(mappings, adapter) {
+      const copied = /* @__PURE__ */ new Set();
+      for (const mapping of mappings) {
+        if (copied.has(mapping.destinationPath)) {
+          continue;
+        }
+        copied.add(mapping.destinationPath);
+        const data = await adapter.readBinary(mapping.sourcePath);
+        await adapter.writeBinary(mapping.destinationPath, data);
+      }
+    }
+    function createNodeWebBookAdapter(fs, rootDir = process.cwd()) {
+      const root = path.resolve(rootDir);
+      return {
+        async listMarkdownFiles(sourceFolder) {
+          const absoluteSource = resolveInsideRoot(root, sourceFolder);
+          const files = [];
+          await walkMarkdownFiles(absoluteSource, files, root);
+          return files;
+        },
+        async readText(filePath) {
+          return fs.promises.readFile(resolveInsideRoot(root, filePath), "utf8");
+        },
+        async writeText(filePath, text) {
+          const absolutePath = resolveInsideRoot(root, filePath);
+          await fs.promises.mkdir(path.dirname(absolutePath), { recursive: true });
+          await fs.promises.writeFile(absolutePath, text, "utf8");
+        },
+        async readBinary(filePath) {
+          return fs.promises.readFile(resolveInsideRoot(root, filePath));
+        },
+        async writeBinary(filePath, data) {
+          const absolutePath = resolveInsideRoot(root, filePath);
+          await fs.promises.mkdir(path.dirname(absolutePath), { recursive: true });
+          await fs.promises.writeFile(absolutePath, data);
+        },
+        async ensureDir(folderPath) {
+          await fs.promises.mkdir(resolveInsideRoot(root, folderPath), { recursive: true });
+        },
+        async removeDir(folderPath) {
+          const absolutePath = resolveInsideRoot(root, folderPath);
+          await fs.promises.rm(absolutePath, { recursive: true, force: true });
+        },
+        async resolveAsset(target, sourcePath) {
+          return resolveNodeAsset(fs, root, target, sourcePath);
+        }
+      };
+    }
+    async function walkMarkdownFiles(directory, files, root) {
+      let entries = [];
+      try {
+        entries = await require("node:fs").promises.readdir(directory, { withFileTypes: true });
+      } catch (error) {
+        if (error && error.code === "ENOENT") {
+          return;
+        }
+        throw error;
+      }
+      for (const entry of entries) {
+        const absolutePath = path.join(directory, entry.name);
+        if (entry.isDirectory()) {
+          await walkMarkdownFiles(absolutePath, files, root);
+          continue;
+        }
+        if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== ".md") {
+          continue;
+        }
+        const stat = await require("node:fs").promises.stat(absolutePath);
+        files.push({
+          path: normalizePath2(path.relative(root, absolutePath)),
+          mtime: stat.mtimeMs
+        });
+      }
+    }
+    async function resolveNodeAsset(fs, root, target, sourcePath) {
+      const candidates = [];
+      const normalizedTarget = normalizePath2(target);
+      if (normalizedTarget) {
+        candidates.push(normalizedTarget);
+      }
+      if (sourcePath) {
+        candidates.push(normalizePath2(path.join(path.dirname(sourcePath), target)));
+      }
+      for (const candidate of candidates) {
+        try {
+          const absolutePath = resolveInsideRoot(root, candidate);
+          const stat = await fs.promises.stat(absolutePath);
+          if (stat.isFile()) {
+            return { path: normalizePath2(path.relative(root, absolutePath)) };
+          }
+        } catch (e) {
+        }
+      }
+      return null;
+    }
+    function resolveInsideRoot(root, filePath) {
+      const absolutePath = path.resolve(root, filePath || ".");
+      if (absolutePath !== root && !absolutePath.startsWith(`${root}${path.sep}`)) {
+        throw new Error(`Path is outside the export root: ${filePath}`);
+      }
+      return absolutePath;
+    }
+    function buildWebBookSlug(sourcePath, sourceFolder, title, counts) {
+      const folder = normalizePath2(sourceFolder).replace(/\/+$/g, "");
+      const relative = normalizePath2(sourcePath).replace(new RegExp(`^${escapeRegExp(folder)}/?`), "");
+      const base = slugify2(relative.replace(/\.md$/i, "") || title || sourcePath);
+      const hash = shortHash(relative || sourcePath);
+      const candidate = `${base}-${hash}`;
+      const count = counts.get(candidate) || 0;
+      counts.set(candidate, count + 1);
+      return count > 0 ? `${candidate}-${count + 1}` : candidate;
+    }
+    function estimateReadingTime(markdown) {
+      return Math.max(1, Math.ceil(String(markdown || "").split(/\s+/).filter(Boolean).length / 220));
+    }
+    function extractArticleHtml(html) {
+      const match = /<article[^>]*>\s*([\s\S]*?)\s*<\/article>/i.exec(String(html || ""));
+      return (match ? match[1] : String(html || "")).replace(/<pre class="frontmatter">[\s\S]*?<\/pre>\s*/i, "").trim();
+    }
+    function normalizeList(value, fallback) {
+      if (Array.isArray(value)) {
+        return value.map((item) => String(item || "").trim()).filter(Boolean);
+      }
+      if (typeof value === "string") {
+        return value.split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean);
+      }
+      return fallback;
+    }
+    function parseBooleanOption(value, fallback) {
+      if (typeof value === "boolean") {
+        return value;
+      }
+      if (typeof value === "string") {
+        if (/^(true|yes|1)$/i.test(value)) {
+          return true;
+        }
+        if (/^(false|no|0)$/i.test(value)) {
+          return false;
+        }
+      }
+      return fallback;
+    }
+    function normalizePath2(value) {
+      return String(value || "").replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/$/g, "");
+    }
+    function joinPath(...parts) {
+      return normalizePath2(parts.filter(Boolean).join("/"));
+    }
+    function shortHash(value) {
+      let hash = 5381;
+      for (const char of String(value || "")) {
+        hash = (hash << 5) + hash + char.charCodeAt(0);
+        hash >>>= 0;
+      }
+      return hash.toString(36).slice(0, 6);
+    }
+    function escapeRegExp(value) {
+      return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+    module2.exports = {
+      DEFAULT_WEB_BOOK_OPTIONS,
+      buildWebBookSlug,
+      createNodeWebBookAdapter,
+      exportWebBook: exportWebBook2,
+      extractArticleHtml,
+      normalizePath: normalizePath2,
+      parseBooleanOption
     };
   }
 });
@@ -3445,13 +3849,10 @@ var { injectReaderFeedback, shouldAttachReaderFeedback, validateGiscusConfig } =
 var { buildPagesUrl, buildPublishPath, buildShareHomeUrl, buildShortPagesUrl, inferPagesBaseUrl: inferPagesBaseUrl2, parseRepo, renderShareIndexHtml, updateShareIndex } = require_github_pages();
 var { validateHtmlArtifact } = require_html_qa();
 var { slugify } = require_html();
-var { buildPublishManifest } = require_publishManifest();
-var { evaluatePublishSafety } = require_publishSafety();
 var { migrateSettings } = require_settings();
-var { buildSearchEntry } = require_searchIndex();
 var { buildShortId, injectSocialMeta } = require_social();
 var { applyPresetToOptions } = require_presets();
-var { renderSafetyReport, renderWebBookIndex, renderWebBookPage } = require_ysdaWebBook();
+var { exportWebBook } = require_webBookExport();
 var DEFAULT_SETTINGS = {
   exportFolder: "html-exports",
   webBookSourceFolder: "",
@@ -3755,158 +4156,34 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
     }
   }
   async exportFolderAsWebBook() {
-    var _a;
     const sourceFolder = (0, import_obsidian7.normalizePath)(this.settings.webBookSourceFolder.trim());
     if (!sourceFolder) {
       new import_obsidian7.Notice("Set a source folder in YSDA Publisher settings before exporting a web book.");
       return;
     }
     const outputFolder = (0, import_obsidian7.normalizePath)(this.settings.webBookOutputFolder.trim() || DEFAULT_SETTINGS.webBookOutputFolder);
-    const markdownFiles = this.app.vault.getFiles().filter((file) => file.extension === "md" && this.isInFolder(file.path, sourceFolder)).sort((a, b) => a.path.localeCompare(b.path));
-    if (markdownFiles.length === 0) {
-      new import_obsidian7.Notice(`No Markdown notes found under ${sourceFolder}.`);
-      return;
-    }
     const progress = new MarktlProgressModal(this.app);
     progress.open();
-    progress.addStep(`Source folder: ${sourceFolder}`);
-    progress.addStep(`Output folder: ${outputFolder}`);
-    progress.addStep(`Scanning ${markdownFiles.length} Markdown note(s)...`);
-    const generatedAt = (/* @__PURE__ */ new Date()).toISOString();
-    const pages = [];
-    const skipped = [];
-    const warnings = [];
-    const searchEntries = [];
-    const slugCounts = /* @__PURE__ */ new Map();
-    const usedAssetNamesBySlug = /* @__PURE__ */ new Map();
     try {
-      await this.ensureFolder(outputFolder);
-      await this.app.vault.adapter.write((0, import_obsidian7.normalizePath)(`${outputFolder}/.nojekyll`), "");
-      for (const file of markdownFiles) {
-        progress.addStep(`Checking ${file.path}...`);
-        const markdown = await this.app.vault.read(file);
-        const safety = evaluatePublishSafety(markdown, {
-          sourcePath: file.path,
-          defaultVisibility: this.settings.defaultExportVisibility,
-          requireReviewedForPublicSafe: this.settings.requireReviewedForPublicSafe,
-          blockedTerms: this.linesFromSetting(this.settings.blockedTerms),
-          blockedUrlFragments: this.linesFromSetting(this.settings.blockedUrlFragments)
-        });
-        if (!safety.allowed) {
-          skipped.push({
-            sourcePath: file.path,
-            status: safety.status,
-            reasons: safety.reasons,
-            warnings: safety.warnings
-          });
-          continue;
-        }
-        const slug = this.buildWebBookSlug(file.path, sourceFolder, safety.metadata.title, slugCounts);
-        const pageFolder = (0, import_obsidian7.normalizePath)(`${outputFolder}/pages/${slug}`);
-        const assetPlan = {
-          folder: outputFolder,
-          basename: slug,
-          outputPath: (0, import_obsidian7.normalizePath)(`${pageFolder}/index.html`),
-          assetFolder: (0, import_obsidian7.normalizePath)(`${pageFolder}/assets`),
-          assetRelativePrefix: "assets"
-        };
-        const assetResult = await this.resolveImageAssets(markdown, file, assetPlan);
-        if (assetResult.warnings.length > 0) {
-          skipped.push({
-            sourcePath: file.path,
-            status: "blocked",
-            reasons: assetResult.warnings,
-            warnings: safety.warnings
-          });
-          continue;
-        }
-        const converted = convertMarkdownToHtml(markdown, {
-          template: "ysda-web-book",
-          trusted: false,
-          sourcePath: file.path
-        });
-        const articleHtml = this.extractArticleHtml(rewriteHtmlImageSources(converted, assetResult.mappings));
-        const pageUrl = `pages/${slug}/`;
-        const pageRecord = {
-          title: safety.metadata.title,
-          slug,
-          url: pageUrl,
-          sourcePath: file.path,
-          tags: safety.metadata.tags,
-          visibility: safety.metadata.visibility,
-          updatedAt: ((_a = file.stat) == null ? void 0 : _a.mtime) ? new Date(file.stat.mtime).toISOString() : generatedAt,
-          summary: safety.metadata.summary,
-          readingTimeMinutes: Math.max(1, Math.ceil(String(safety.body || markdown).split(/\s+/).filter(Boolean).length / 220)),
-          warnings: [...safety.warnings]
-        };
-        pages.push(pageRecord);
-        searchEntries.push(buildSearchEntry(pageRecord, safety.body || markdown));
-        usedAssetNamesBySlug.set(slug, new Set(assetResult.mappings.map((mapping) => mapping.destinationPath)));
-        await this.copyImageAssets(assetResult.mappings);
-        await this.ensureParentFolder(assetPlan.outputPath);
-        await this.app.vault.adapter.write(assetPlan.outputPath, renderWebBookPage({
-          ...pageRecord,
-          articleHtml,
-          generatedAt,
-          siteTitle: this.settings.webBookSiteTitle || "YSDA Publisher"
-        }));
-      }
-      const orderedPages = pages.map((page, index) => ({
-        ...page,
-        previous: index > 0 ? pages[index - 1] : null,
-        next: index < pages.length - 1 ? pages[index + 1] : null
-      }));
-      for (const page of orderedPages) {
-        const htmlPath = (0, import_obsidian7.normalizePath)(`${outputFolder}/${page.url}index.html`);
-        const current = await this.app.vault.adapter.read(htmlPath);
-        await this.app.vault.adapter.write(htmlPath, renderWebBookPage({
-          ...page,
-          articleHtml: this.extractArticleHtml(current),
-          generatedAt,
-          siteTitle: this.settings.webBookSiteTitle || "YSDA Publisher"
-        }));
-      }
-      const manifest = buildPublishManifest({
-        generatedAt,
+      const result = await exportWebBook({
         sourceFolder,
         outputFolder,
-        pages,
-        skipped,
-        warnings
-      });
-      const safetyReport = {
-        generatedAt,
-        sourceFolder,
-        outputFolder,
-        summary: {
-          exportedCount: pages.length,
-          skippedCount: skipped.filter((item) => item.status !== "blocked").length,
-          blockedCount: skipped.filter((item) => item.status === "blocked").length
-        },
-        pages,
-        skipped,
-        warnings
-      };
-      await this.app.vault.adapter.write((0, import_obsidian7.normalizePath)(`${outputFolder}/search.json`), JSON.stringify(searchEntries, null, 2));
-      await this.app.vault.adapter.write((0, import_obsidian7.normalizePath)(`${outputFolder}/publish-manifest.json`), JSON.stringify(manifest, null, 2));
-      await this.app.vault.adapter.write((0, import_obsidian7.normalizePath)(`${outputFolder}/safety-report.json`), JSON.stringify(safetyReport, null, 2));
-      await this.app.vault.adapter.write((0, import_obsidian7.normalizePath)(`${outputFolder}/safety-report.html`), renderSafetyReport(safetyReport, {
-        siteTitle: this.settings.webBookSiteTitle || "YSDA Publisher"
-      }));
-      await this.app.vault.adapter.write((0, import_obsidian7.normalizePath)(`${outputFolder}/index.html`), renderWebBookIndex({
         siteTitle: this.settings.webBookSiteTitle || "YSDA Publisher",
         siteDescription: this.settings.webBookSiteDescription || DEFAULT_SETTINGS.webBookSiteDescription,
-        generatedAt,
-        pages,
-        skipped,
-        warnings
-      }));
-      const skippedCount = skipped.length;
-      progress.complete(`Web book exported: ${pages.length} page(s), ${skippedCount} skipped/blocked.`);
-      new import_obsidian7.Notice(`YSDA Publisher web book exported to ${outputFolder}.`);
-      if (usedAssetNamesBySlug.size === 0) {
-        progress.addStep("No local image assets were bundled.");
+        defaultVisibility: this.settings.defaultExportVisibility,
+        requireReviewedForPublicSafe: this.settings.requireReviewedForPublicSafe,
+        blockedTerms: this.linesFromSetting(this.settings.blockedTerms),
+        blockedUrlFragments: this.linesFromSetting(this.settings.blockedUrlFragments),
+        adapter: this.createVaultWebBookAdapter(),
+        onProgress: (message) => progress.addStep(message)
+      });
+      if (result.pages.length === 0 && result.skipped.length === 0) {
+        progress.complete(`No Markdown notes found under ${sourceFolder}.`);
+        new import_obsidian7.Notice(`No Markdown notes found under ${sourceFolder}.`);
+        return;
       }
+      progress.complete(`Web book exported: ${result.exportedCount} page(s), ${result.skippedCount} skipped, ${result.blockedCount} blocked.`);
+      new import_obsidian7.Notice(`YSDA Publisher web book exported to ${outputFolder}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       progress.fail(message);
@@ -4123,6 +4400,49 @@ var MarktlPlugin = class extends import_obsidian7.Plugin {
       return;
     }
     await this.ensureParentFolder(`${normalized}/.keep`);
+  }
+  createVaultWebBookAdapter() {
+    const adapter = this.app.vault.adapter;
+    return {
+      listMarkdownFiles: async (sourceFolder) => this.app.vault.getFiles().filter((file) => file.extension === "md" && this.isInFolder(file.path, sourceFolder)).map((file) => {
+        var _a;
+        return { path: file.path, mtime: (_a = file.stat) == null ? void 0 : _a.mtime };
+      }),
+      readText: async (filePath) => {
+        const file = this.app.vault.getAbstractFileByPath((0, import_obsidian7.normalizePath)(filePath));
+        if (!(file instanceof import_obsidian7.TFile)) {
+          throw new Error(`Markdown note not found: ${filePath}`);
+        }
+        return this.app.vault.read(file);
+      },
+      writeText: async (filePath, text) => {
+        await this.ensureParentFolder(filePath);
+        await this.app.vault.adapter.write((0, import_obsidian7.normalizePath)(filePath), text);
+      },
+      readBinary: async (filePath) => this.app.vault.adapter.readBinary((0, import_obsidian7.normalizePath)(filePath)),
+      writeBinary: async (filePath, data) => {
+        await this.ensureParentFolder(filePath);
+        await this.app.vault.adapter.writeBinary((0, import_obsidian7.normalizePath)(filePath), data);
+      },
+      ensureDir: async (folderPath) => this.ensureFolder(folderPath),
+      removeDir: async (folderPath) => {
+        const normalized = (0, import_obsidian7.normalizePath)(folderPath);
+        if (!normalized || !await this.app.vault.adapter.exists(normalized)) {
+          return;
+        }
+        if (adapter.rmdir) {
+          await adapter.rmdir(normalized, true);
+        }
+      },
+      resolveAsset: async (target, sourcePath) => {
+        const source = this.app.vault.getAbstractFileByPath((0, import_obsidian7.normalizePath)(sourcePath));
+        if (!(source instanceof import_obsidian7.TFile)) {
+          return null;
+        }
+        const imageFile = this.resolveImageFile(target, source);
+        return imageFile ? { path: imageFile.path } : null;
+      }
+    };
   }
   linesFromSetting(value) {
     return String(value || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);

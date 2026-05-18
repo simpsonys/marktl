@@ -6,7 +6,9 @@
   "scripts": {
     "test": "node --test tests/*.test.cjs",
     "typecheck": "tsc --noEmit",
-    "build": "esbuild src/main.ts --bundle --external:obsidian --format=cjs --platform=node --target=es2018 --outfile=main.js"
+    "build": "esbuild src/main.ts --bundle --external:obsidian --format=cjs --platform=node --target=es2018 --outfile=main.js",
+    "export:webbook": "node scripts/export-web-book.mjs",
+    "export:webbook:sample": "node scripts/export-web-book.mjs --source sample-notes --output html-exports/ysda-publisher --site-title 'YSDA Publisher' --site-description 'Reviewed Markdown notes published as a static web book.'"
   },
   "keywords": [
     "obsidian",
