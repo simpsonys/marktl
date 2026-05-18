@@ -16,6 +16,7 @@ function evaluatePublishSafety(markdown, options = {}) {
   const metadata = buildMetadata(frontmatter, parsed.body, sourcePath, options);
   const reasons = [];
   const warnings = [];
+  const diagnostics = [];
 
   if (frontmatter.publish !== true) {
     reasons.push('Missing publish: true frontmatter.');
@@ -46,12 +47,21 @@ function evaluatePublishSafety(markdown, options = {}) {
     reasons.push(`Internal-looking URL found: ${pattern}`);
   }
 
-  if (/<script\b/i.test(text) || /<iframe\b/i.test(text)) {
-    reasons.push('Raw script or iframe HTML is not allowed in public-safe folder export.');
-  }
-
-  if (/on\w+\s*=/i.test(text) || /javascript:/i.test(text)) {
-    reasons.push('Inline event handlers or javascript: URLs are not allowed in public-safe folder export.');
+  for (const finding of findUnsafeRawHtmlPatterns(parsed.body, { startLine: getBodyStartLine(text) })) {
+    const message = formatUnsafeFinding(finding);
+    diagnostics.push({
+      type: finding.category,
+      severity: finding.blocked ? 'error' : 'warning',
+      line: finding.line,
+      context: finding.context,
+      match: finding.match,
+      message,
+    });
+    if (finding.blocked) {
+      reasons.push(message);
+    } else {
+      warnings.push(message);
+    }
   }
 
   const localImages = extractMarkdownImageReferences(text).map((reference) => reference.target);
@@ -67,6 +77,7 @@ function evaluatePublishSafety(markdown, options = {}) {
     status: allowed ? 'included' : blocked ? 'blocked' : 'skipped',
     reasons,
     warnings,
+    diagnostics,
     metadata,
     body: parsed.body,
     frontmatter,
@@ -181,6 +192,150 @@ function findInternalLookingUrls(text) {
   return findings;
 }
 
+function findUnsafeRawHtmlPatterns(markdown, options = {}) {
+  const findings = [];
+  const lines = String(markdown || '').replace(/\r\n/g, '\n').split('\n');
+  const startLine = Math.max(1, Number(options.startLine) || 1);
+  let inFence = false;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const lineNumber = startLine + index;
+    if (/^\s*(```|~~~)/.test(line)) {
+      scanCodeExampleLine(line, lineNumber, findings);
+      inFence = !inFence;
+      continue;
+    }
+
+    if (inFence) {
+      scanCodeExampleLine(line, lineNumber, findings);
+      continue;
+    }
+
+    for (const span of extractInlineCodeSpans(line)) {
+      scanCodeExampleLine(span.text, lineNumber, findings);
+    }
+
+    scanRenderedLine(stripInlineCodeSpansForSafety(line), lineNumber, findings);
+  }
+
+  return findings;
+}
+
+function getBodyStartLine(markdown) {
+  const normalized = String(markdown || '').replace(/\r\n/g, '\n');
+  if (!normalized.startsWith('---\n')) {
+    return 1;
+  }
+  const closeIndex = normalized.indexOf('\n---\n', 4);
+  if (closeIndex === -1) {
+    return 1;
+  }
+  const bodyStartIndex = closeIndex + 5;
+  const leadingBlankLines = (/^\n*/.exec(normalized.slice(bodyStartIndex)) || [''])[0].length;
+  return normalized.slice(0, bodyStartIndex + leadingBlankLines).split('\n').length;
+}
+
+function scanRenderedLine(line, lineNumber, findings) {
+  const text = String(line || '');
+
+  for (const match of text.matchAll(/<\s*(script|iframe)\b[^>]*>/gi)) {
+    findings.push(buildFinding({
+      category: `${match[1].toLowerCase()}-tag`,
+      context: 'rendered-raw-html',
+      line: lineNumber,
+      match: match[0],
+      blocked: true,
+    }));
+  }
+
+  for (const match of text.matchAll(/<[^>\n]*\s(on[a-z][\w:-]*)\s*=/gi)) {
+    findings.push(buildFinding({
+      category: 'inline-event-handler',
+      context: 'rendered-raw-html',
+      line: lineNumber,
+      match: match[1],
+      blocked: true,
+    }));
+  }
+
+  for (const match of text.matchAll(/<[^>\n]*\s([a-z][\w:-]*)\s*=\s*(?:"\s*javascript:|'\s*javascript:|javascript:)/gi)) {
+    findings.push(buildFinding({
+      category: 'javascript-url',
+      context: 'rendered-raw-html',
+      line: lineNumber,
+      match: match[1],
+      blocked: true,
+    }));
+  }
+
+  for (const match of text.matchAll(/!?\[[^\]]*]\(\s*<?\s*javascript:/gi)) {
+    findings.push(buildFinding({
+      category: 'javascript-url',
+      context: 'rendered-markdown-link',
+      line: lineNumber,
+      match: match[0],
+      blocked: true,
+    }));
+  }
+}
+
+function scanCodeExampleLine(line, lineNumber, findings) {
+  const text = String(line || '');
+  if (/javascript:/i.test(text)) {
+    findings.push(buildFinding({
+      category: 'javascript-url',
+      context: 'code-example',
+      line: lineNumber,
+      match: 'javascript:',
+      blocked: false,
+    }));
+  }
+
+  for (const match of text.matchAll(/<[^>\n]*\s(on[a-z][\w:-]*)\s*=/gi)) {
+    findings.push(buildFinding({
+      category: 'inline-event-handler',
+      context: 'code-example',
+      line: lineNumber,
+      match: match[1],
+      blocked: false,
+    }));
+  }
+}
+
+function extractInlineCodeSpans(line) {
+  const spans = [];
+  for (const match of String(line || '').matchAll(/`([^`]+)`/g)) {
+    spans.push({ text: match[1], index: match.index || 0 });
+  }
+  return spans;
+}
+
+function stripInlineCodeSpansForSafety(line) {
+  return String(line || '').replace(/`[^`]+`/g, (match) => ' '.repeat(match.length));
+}
+
+function buildFinding(input) {
+  return {
+    category: input.category,
+    context: input.context,
+    line: input.line,
+    match: input.match,
+    blocked: Boolean(input.blocked),
+  };
+}
+
+function formatUnsafeFinding(finding) {
+  const status = finding.blocked ? 'blocked' : 'warning';
+  const context = finding.context === 'code-example'
+    ? 'code/example context'
+    : finding.context;
+  const action = finding.blocked
+    ? 'Unsafe raw rendered content is not allowed in public-safe folder export'
+    : 'Unsafe-looking text appeared in code/example context and was not blocked';
+  return `Line ${finding.line}: ${finding.category} ${status} in ${context} (${finding.match}): ${action}.`;
+}
+
 function uniqueStrings(values) {
   return [...new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean))];
 }
@@ -188,5 +343,6 @@ function uniqueStrings(values) {
 module.exports = {
   buildSummary,
   evaluatePublishSafety,
+  findUnsafeRawHtmlPatterns,
   parseFrontmatter,
 };

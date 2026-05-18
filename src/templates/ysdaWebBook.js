@@ -107,11 +107,15 @@ function renderSafetyReport(report, options = {}) {
     <td>${escapeHtml([item.title, item.sourcePath].filter(Boolean).join(' - '))}</td>
     <td>${escapeHtml((item.reasons || []).join('; '))}</td>
   </tr>`).join('\n');
-  const diagnosticRows = pages.flatMap((page) => (page.diagnostics || []).map((item) => `<tr>
+  const diagnosticSources = [
+    ...pages.map((page) => ({ ...page, diagnosticSource: page.title || page.sourcePath || '' })),
+    ...skipped.map((item) => ({ ...item, diagnosticSource: item.title || item.sourcePath || '' })),
+  ];
+  const diagnosticRows = diagnosticSources.flatMap((page) => (page.diagnostics || []).map((item) => `<tr>
     <td>${escapeHtml(item.severity || 'info')}</td>
-    <td>${escapeHtml(page.title || page.sourcePath || '')}</td>
+    <td>${escapeHtml(page.diagnosticSource || '')}</td>
     <td>${escapeHtml(item.type || 'diagnostic')}</td>
-    <td>${escapeHtml(item.message || item.target || '')}</td>
+    <td>${escapeHtml(item.message || item.target || '')}${item.line ? ` (line ${escapeHtml(String(item.line))})` : ''}</td>
   </tr>`)).join('\n');
 
   return `<!doctype html>
@@ -178,10 +182,52 @@ function buildToc(headings) {
   if (!headings.length) {
     return '';
   }
+  const outline = buildTocOutline(headings);
   return `<nav class="toc" aria-label="Table of contents">
-    <strong>Contents</strong>
-    ${headings.map((heading) => `<a class="toc-l${heading.level}" href="#${escapeHtml(heading.id)}">${escapeHtml(heading.text)}</a>`).join('')}
+    <div class="toc-title">Contents</div>
+    ${renderTocItems(outline)}
   </nav>`;
+}
+
+function buildTocOutline(headings) {
+  const root = [];
+  let currentH2 = null;
+  let currentH3 = null;
+
+  for (const heading of headings) {
+    const item = { ...heading, children: [] };
+    if (heading.level <= 2) {
+      root.push(item);
+      currentH2 = item;
+      currentH3 = null;
+      continue;
+    }
+    if (heading.level === 3) {
+      if (currentH2) {
+        currentH2.children.push(item);
+      } else {
+        root.push(item);
+      }
+      currentH3 = item;
+      continue;
+    }
+    if (currentH3) {
+      currentH3.children.push(item);
+    } else if (currentH2) {
+      currentH2.children.push(item);
+    } else {
+      root.push(item);
+    }
+  }
+
+  return root;
+}
+
+function renderTocItems(items) {
+  if (!items.length) {
+    return '';
+  }
+  return `<ol class="toc-list">${items.map((item) => `<li class="toc-item toc-l${item.level}"><a href="#${escapeHtml(item.id)}">${escapeHtml(item.text)}</a>${renderTocItems(item.children || [])}</li>`).join('')}</ol>`;
 }
 
 function renderTags(tags) {
@@ -218,8 +264,8 @@ main{max-width:1040px;margin:0 auto;padding:36px 22px 60px}
 h1{font-size:clamp(30px,5vw,52px);line-height:1.08;margin:10px 0 14px;color:#0f172a;overflow-wrap:anywhere}
 .meta,.tags{display:flex;flex-wrap:wrap;gap:8px 14px;color:#475569;font-size:14px}
 .tags span{border:1px solid #cbd5e1;background:#fff;padding:4px 8px;border-radius:999px}
-.toc{display:flex;flex-wrap:wrap;gap:8px 14px;margin:22px 0;padding:14px 0;border-bottom:1px solid #d8dee8}
-.toc strong{margin-right:8px}.toc a{color:#0f766e;text-decoration:none}.toc-l3{padding-left:10px}.toc-l4{padding-left:20px}
+.toc{margin:22px 0;padding:16px 18px;border:1px solid #d8dee8;border-radius:8px;background:#fff;max-height:min(52vh,520px);overflow:auto}
+.toc-title{font-weight:700;margin-bottom:10px;color:#0f172a}.toc-list{margin:0;padding-left:20px}.toc-list .toc-list{margin-top:4px;padding-left:18px}.toc-item{line-height:1.45;margin:6px 0}.toc a{color:#0f766e;text-decoration:none}.toc a:hover{text-decoration:underline}
 .content{background:#fff;border:1px solid #d8dee8;border-radius:8px;padding:28px;overflow-wrap:anywhere}
 .content h1,.content h2,.content h3{color:#0f172a;line-height:1.2}.content h2{margin-top:36px;padding-top:16px;border-top:1px solid #e2e8f0}
 .content p,.content li{line-height:1.72}.content pre{overflow:auto;background:#111827;color:#f9fafb;padding:16px;border-radius:8px}.content code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
@@ -229,7 +275,7 @@ h1{font-size:clamp(30px,5vw,52px);line-height:1.08;margin:10px 0 14px;color:#0f1
 .missing-link,.missing-asset{display:inline-block;border:1px dashed #94a3b8;background:#f8fafc;color:#475569;border-radius:6px;padding:1px 6px}.missing-asset{margin:8px 0;padding:8px 10px}
 .page-nav{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:22px}.nav-link{display:block;border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:14px;color:#0f766e;text-decoration:none}
 footer{text-align:center;color:#64748b;padding:26px}
-@media(max-width:720px){main{padding:24px 14px}.content{padding:18px}.page-nav{grid-template-columns:1fr}.site-header{align-items:flex-start;flex-direction:column}h1{font-size:clamp(28px,10vw,40px)}.toc{display:block}.toc a{display:block;margin-top:8px;padding-left:0}.callout{padding:10px 12px}}
+@media(max-width:720px){main{padding:24px 14px}.content{padding:18px}.page-nav{grid-template-columns:1fr}.site-header{align-items:flex-start;flex-direction:column}h1{font-size:clamp(28px,10vw,40px)}.toc{max-height:46vh;padding:14px}.callout{padding:10px 12px}}
 `;
 }
 

@@ -68,6 +68,68 @@ See http://intranet.local/page.
   assert.match(result.reasons.join('\n'), /iframe/);
 });
 
+test('public-safe scanner ignores dangerous-looking examples in code contexts', () => {
+  const result = evaluatePublishSafety(`---
+publish: true
+visibility: public-safe
+reviewed: true
+---
+# Safety Examples
+
+\`\`\`html
+<a href="javascript:alert(1)">x</a>
+<img src=x onerror=alert(1)>
+\`\`\`
+
+Use \`javascript:\` URLs as an example of what to block.
+
+### Convolution = 도장 찍으면서 훑기
+- \`context = weights @ V\`
+`, {});
+
+  assert.equal(result.allowed, true);
+  assert.equal(result.status, 'included');
+  assert.equal(result.diagnostics.some((item) => item.type === 'javascript-url' && item.context === 'code-example' && item.severity === 'warning'), true);
+  assert.equal(result.diagnostics.some((item) => item.type === 'inline-event-handler' && item.context === 'code-example' && item.severity === 'warning'), true);
+});
+
+test('public-safe scanner blocks raw rendered JavaScript URLs and event handlers', () => {
+  const result = evaluatePublishSafety(`---
+publish: true
+visibility: public-safe
+reviewed: true
+---
+# Unsafe
+
+<a href="javascript:alert(1)">x</a>
+<img src=x onerror=alert(1)>
+<div onclick="alert(1)">x</div>
+`, {});
+
+  assert.equal(result.allowed, false);
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.diagnostics.filter((item) => item.severity === 'error').length, 3);
+  assert.equal(result.diagnostics.some((item) => item.type === 'javascript-url' && item.context === 'rendered-raw-html' && item.line === 8), true);
+  assert.equal(result.diagnostics.some((item) => item.type === 'inline-event-handler' && item.context === 'rendered-raw-html' && item.line === 9), true);
+  assert.match(result.reasons.join('\n'), /Line 8: javascript-url blocked/);
+  assert.match(result.reasons.join('\n'), /Line 10: inline-event-handler blocked/);
+});
+
+test('public-safe scanner blocks javascript markdown links outside code', () => {
+  const result = evaluatePublishSafety(`---
+publish: true
+visibility: public-safe
+reviewed: true
+---
+# Unsafe Link
+
+[x](javascript:alert(1))
+`, {});
+
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.diagnostics.some((item) => item.type === 'javascript-url' && item.context === 'rendered-markdown-link'), true);
+});
+
 test('renders web book index, page, safety report, search entry, and manifest', () => {
   const page = {
     title: 'Voice Service Notes',
@@ -101,6 +163,7 @@ test('renders web book index, page, safety report, search entry, and manifest', 
   assert.match(index, /pages\/voice-service-notes-abc123\//);
   assert.match(html, /Contents/);
   assert.match(html, /id="overview"/);
+  assert.match(html, /class="toc-list"/);
   assert.match(safetyReport, /All scanned notes passed/);
   assert.equal(search.url, page.url);
   assert.equal(manifest.tool, 'YSDA Publisher');

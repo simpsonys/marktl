@@ -101,6 +101,7 @@ async function exportWebBook(options = {}) {
         visibility: safety.metadata.visibility,
         reasons: safety.reasons,
         warnings: safety.warnings,
+        diagnostics: safety.diagnostics,
       });
       continue;
     }
@@ -129,6 +130,7 @@ async function exportWebBook(options = {}) {
     });
 
     const diagnostics = [
+      ...safety.diagnostics,
       ...safety.warnings.map((message) => ({ type: 'publish-warning', severity: 'info', message })),
       ...assetResult.diagnostics,
     ];
