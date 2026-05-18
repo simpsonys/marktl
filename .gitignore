@@ -7,3 +7,6 @@ html-exports/
 docs/.pdca-status.json
 
 .agent-prompt/
+
+# Local smoke-test workspace
+.scratch/
