@@ -614,12 +614,14 @@ var require_converter = __commonJS({
     "use strict";
     var path = require("node:path");
     var { normalizeImageTarget } = require_assets();
-    var { escapeHtml } = require_html();
+    var { escapeHtml, slugify: slugify2 } = require_html();
     var { sanitizeHtml } = require_sanitizer();
     var { wrapWithTemplate } = require_templates();
     function convertMarkdownToHtml2(markdown, options = {}) {
       const parsed = splitFrontmatter(markdown);
-      const bodyHtml = blocksToHtml(parsed.body, options);
+      const diagnostics = Array.isArray(options.diagnostics) ? options.diagnostics : [];
+      const state = createRenderState(options, diagnostics);
+      const bodyHtml = blocksToHtml(parsed.body, options, state);
       const frontmatterHtml = parsed.frontmatter ? `<pre class="frontmatter">${escapeHtml(parsed.frontmatter)}</pre>
 ` : "";
       const title = inferTitle(parsed.body, options.sourcePath);
@@ -654,7 +656,7 @@ var require_converter = __commonJS({
       }
       return "Exported note";
     }
-    function blocksToHtml(markdown, options) {
+    function blocksToHtml(markdown, options = {}, state = createRenderState(options, options.diagnostics)) {
       const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
       const blocks = [];
       let index = 0;
@@ -665,7 +667,7 @@ var require_converter = __commonJS({
           continue;
         }
         if (/^```/.test(line)) {
-          const language = line.replace(/^```/, "").trim();
+          const language = line.replace(/^```/, "").trim().split(/\s+/)[0];
           const code = [];
           index += 1;
           while (index < lines.length && !/^```/.test(lines[index])) {
@@ -673,22 +675,27 @@ var require_converter = __commonJS({
             index += 1;
           }
           index += 1;
-          blocks.push(`<pre><code${language ? ` class="language-${escapeHtml(language)}"` : ""}>${escapeHtml(code.join("\n"))}</code></pre>`);
+          const codeText = escapeHtml(code.join("\n"));
+          if (language.toLowerCase() === "mermaid") {
+            blocks.push(`<pre class="mermaid">${codeText}</pre>`);
+          } else {
+            blocks.push(`<pre><code${language ? ` class="language-${escapeHtml(toClassSuffix(language))}"` : ""}>${codeText}</code></pre>`);
+          }
           continue;
         }
-        const callout = readCallout(lines, index);
+        const callout = readCallout(lines, index, options, state);
         if (callout) {
           blocks.push(callout.html);
           index = callout.nextIndex;
           continue;
         }
-        const table = readTable(lines, index);
+        const table = readTable(lines, index, options, state);
         if (table) {
           blocks.push(table.html);
           index = table.nextIndex;
           continue;
         }
-        const list = readList(lines, index);
+        const list = readList(lines, index, options, state);
         if (list) {
           blocks.push(list.html);
           index = list.nextIndex;
@@ -697,8 +704,21 @@ var require_converter = __commonJS({
         const heading = /^(#{1,6})\s+(.+)$/.exec(line);
         if (heading) {
           const level = heading[1].length;
-          blocks.push(`<h${level}>${inlineMarkdown(heading[2], options)}</h${level}>`);
+          const content = heading[2].replace(/\s+#+\s*$/, "").trim();
+          const id = buildHeadingId(stripInlineMarkdown(content), state);
+          blocks.push(`<h${level} id="${escapeHtml(id)}">${inlineMarkdown(content, options, state)}</h${level}>`);
           index += 1;
+          continue;
+        }
+        if (/^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(line)) {
+          blocks.push("<hr>");
+          index += 1;
+          continue;
+        }
+        const blockquote = readBlockquote(lines, index, options, state);
+        if (blockquote) {
+          blocks.push(blockquote.html);
+          index = blockquote.nextIndex;
           continue;
         }
         const paragraph = [];
@@ -706,19 +726,19 @@ var require_converter = __commonJS({
           paragraph.push(lines[index].trim());
           index += 1;
         }
-        blocks.push(`<p>${inlineMarkdown(paragraph.join(" "), options)}</p>`);
+        blocks.push(`<p>${inlineMarkdown(paragraph.join(" "), options, state)}</p>`);
       }
       return blocks.join("\n");
     }
     function isBlockStart(line) {
-      return /^(```|#{1,6}\s+|>\s+\[!|\s*[-*]\s+|\s*\d+\.\s+)/.test(line) || readTable([line, "| - |"], 0);
+      return /^(```|#{1,6}\s+|>\s*|\s*[-*]\s+|\s*\d+\.\s+)/.test(line) || /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(line) || readTable([line, "| - |"], 0);
     }
-    function readCallout(lines, start) {
-      const match = /^>\s+\[!(\w+)]\s*(.*)$/.exec(lines[start]);
+    function readCallout(lines, start, options = {}, state = createRenderState(options, options.diagnostics)) {
+      const match = /^>\s*\[!([A-Za-z0-9_-]+)]\s*(.*)$/.exec(lines[start]);
       if (!match) {
         return null;
       }
-      const type = match[1].toLowerCase();
+      const type = toClassSuffix(match[1].toLowerCase());
       const title = match[2].trim() || match[1].toUpperCase();
       const body = [];
       let index = start + 1;
@@ -727,11 +747,11 @@ var require_converter = __commonJS({
         index += 1;
       }
       return {
-        html: `<aside class="callout callout-${escapeHtml(type)}"><div class="callout-title">${escapeHtml(title)}</div><div class="callout-body">${blocksToHtml(body.join("\n"), {})}</div></aside>`,
+        html: `<aside class="callout callout-${escapeHtml(type)}"><div class="callout-title">${escapeHtml(title)}</div><div class="callout-body">${blocksToHtml(body.join("\n"), options, state)}</div></aside>`,
         nextIndex: index
       };
     }
-    function readTable(lines, start) {
+    function readTable(lines, start, options = {}, state = createRenderState(options, options.diagnostics)) {
       if (!/^\s*\|.+\|\s*$/.test(lines[start] || "") || !/^\s*\|[\s:-]+\|/.test(lines[start + 1] || "")) {
         return null;
       }
@@ -743,47 +763,258 @@ var require_converter = __commonJS({
       }
       const header = rows[0];
       const body = rows.slice(2);
-      const headerHtml = `<thead><tr>${header.map((cell) => `<th>${inlineMarkdown(cell, {})}</th>`).join("")}</tr></thead>`;
-      const bodyHtml = `<tbody>${body.map((row) => `<tr>${row.map((cell) => `<td>${inlineMarkdown(cell, {})}</td>`).join("")}</tr>`).join("")}</tbody>`;
+      const headerHtml = `<thead><tr>${header.map((cell) => `<th>${inlineMarkdown(cell, options, state)}</th>`).join("")}</tr></thead>`;
+      const bodyHtml = `<tbody>${body.map((row) => `<tr>${row.map((cell) => `<td>${inlineMarkdown(cell, options, state)}</td>`).join("")}</tr>`).join("")}</tbody>`;
       return {
-        html: `<table>${headerHtml}${bodyHtml}</table>`,
+        html: `<div class="table-wrap"><table>${headerHtml}${bodyHtml}</table></div>`,
         nextIndex: index
       };
     }
     function splitTableRow(line) {
       return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
     }
-    function readList(lines, start) {
-      const ordered = /^\s*\d+\.\s+/.test(lines[start]);
-      const unordered = /^\s*[-*]\s+/.test(lines[start]);
-      if (!ordered && !unordered) {
+    function readList(lines, start, options = {}, state = createRenderState(options, options.diagnostics)) {
+      const first = matchListLine(lines[start]);
+      if (!first) {
         return null;
       }
       const items = [];
       let index = start;
-      const matcher = ordered ? /^\s*\d+\.\s+/ : /^\s*[-*]\s+/;
-      while (index < lines.length && matcher.test(lines[index])) {
-        items.push(lines[index].replace(matcher, "").trim());
+      while (index < lines.length) {
+        const item = matchListLine(lines[index]);
+        if (!item || item.indent !== first.indent || item.ordered !== first.ordered) {
+          break;
+        }
+        const childLines = [];
         index += 1;
+        while (index < lines.length) {
+          const next = matchListLine(lines[index]);
+          if (next && next.indent === first.indent) {
+            break;
+          }
+          if (lines[index].trim() && leadingSpaces(lines[index]) <= first.indent) {
+            break;
+          }
+          childLines.push(lines[index].slice(Math.min(lines[index].length, first.indent + 2)));
+          index += 1;
+        }
+        const childHtml = childLines.join("\n").trim() ? blocksToHtml(childLines.join("\n"), options, state) : "";
+        items.push(`<li>${inlineMarkdown(item.content, options, state)}${childHtml ? `
+${childHtml}` : ""}</li>`);
       }
-      const tag = ordered ? "ol" : "ul";
+      const tag = first.ordered ? "ol" : "ul";
       return {
-        html: `<${tag}>${items.map((item) => `<li>${inlineMarkdown(item, {})}</li>`).join("")}</${tag}>`,
+        html: `<${tag}>${items.join("")}</${tag}>`,
         nextIndex: index
       };
     }
-    function inlineMarkdown(value) {
-      return escapeHtml(value).replace(/!\[\[([^\]]+)]]/g, (_match, target) => {
-        const src = normalizeImageTarget(target);
-        return `<img src="${escapeHtml(src)}" alt="${escapeHtml(path.basename(src))}">`;
-      }).replace(/!\[([^\]]*)]\(([^)]+)\)/g, (_match, alt, src) => {
-        const normalizedSrc = normalizeImageTarget(src);
-        return `<img src="${escapeHtml(normalizedSrc)}" alt="${escapeHtml(alt)}">`;
-      }).replace(/\[([^\]]+)]\(([^)]+)\)/g, (_match, label, href) => `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/\*([^*]+)\*/g, "<em>$1</em>").replace(/`([^`]+)`/g, "<code>$1</code>");
+    function readBlockquote(lines, start, options, state) {
+      if (!/^>\s*/.test(lines[start]) || /^>\s*\[!/.test(lines[start])) {
+        return null;
+      }
+      const body = [];
+      let index = start;
+      while (index < lines.length && /^>\s*/.test(lines[index])) {
+        body.push(lines[index].replace(/^>\s?/, ""));
+        index += 1;
+      }
+      return {
+        html: `<blockquote>${blocksToHtml(body.join("\n"), options, state)}</blockquote>`,
+        nextIndex: index
+      };
+    }
+    function inlineMarkdown(value, options = {}, state = createRenderState(options, options.diagnostics)) {
+      const text = String(value || "");
+      let html = "";
+      let index = 0;
+      while (index < text.length) {
+        const rest = text.slice(index);
+        const code = /^`([^`]+)`/.exec(rest);
+        if (code) {
+          html += `<code>${escapeHtml(code[1])}</code>`;
+          index += code[0].length;
+          continue;
+        }
+        const embed = /^!\[\[([^\]]+)]]/.exec(rest);
+        if (embed) {
+          html += renderImageEmbed(embed[1], options, state);
+          index += embed[0].length;
+          continue;
+        }
+        const image = /^!\[([^\]]*)]\(([^)]+)\)/.exec(rest);
+        if (image) {
+          html += renderMarkdownImage(image[1], image[2], options, state);
+          index += image[0].length;
+          continue;
+        }
+        const wikilink = /^\[\[([^\]]+)]]/.exec(rest);
+        if (wikilink) {
+          html += renderWikiLink(wikilink[1], options, state);
+          index += wikilink[0].length;
+          continue;
+        }
+        const link = /^\[([^\]]+)]\(([^)]+)\)/.exec(rest);
+        if (link) {
+          html += renderMarkdownLink(link[1], link[2], options, state);
+          index += link[0].length;
+          continue;
+        }
+        const strong = /^\*\*([^*]+)\*\*/.exec(rest);
+        if (strong) {
+          html += `<strong>${escapeHtml(strong[1])}</strong>`;
+          index += strong[0].length;
+          continue;
+        }
+        const emphasis = /^\*([^*\s][^*]*?)\*/.exec(rest);
+        if (emphasis) {
+          html += `<em>${escapeHtml(emphasis[1])}</em>`;
+          index += emphasis[0].length;
+          continue;
+        }
+        html += escapeHtml(text[index]);
+        index += 1;
+      }
+      return html;
+    }
+    function renderWikiLink(raw, options, state) {
+      const parsed = parseWikiLink(raw);
+      if (!parsed.target && parsed.heading) {
+        const label2 = parsed.alias || parsed.heading;
+        return `<a class="wikilink" href="#${escapeHtml(slugify2(parsed.heading))}">${escapeHtml(label2)}</a>`;
+      }
+      const resolver = typeof options.resolveWikiLink === "function" ? options.resolveWikiLink : null;
+      const resolved = resolver ? resolver(parsed) : null;
+      const label = parsed.alias || parsed.heading || parsed.target || raw;
+      if (resolved && resolved.href) {
+        return `<a class="wikilink" href="${escapeHtml(resolved.href)}">${escapeHtml(label)}</a>`;
+      }
+      pushDiagnostic(state, {
+        type: "unresolved-wikilink",
+        severity: "warning",
+        target: parsed.target,
+        heading: parsed.heading,
+        message: `Unresolved wikilink: ${parsed.raw}`
+      });
+      return `<span class="missing-link" title="Unresolved note link">${escapeHtml(label)}</span>`;
+    }
+    function renderImageEmbed(raw, options, state) {
+      const [targetPart, aliasPart] = String(raw || "").split("|");
+      const target = normalizeImageTarget(targetPart);
+      const alt = String(aliasPart || "").trim() || path.basename(target) || target;
+      const resolved = resolveImageSource(target, options);
+      if (resolved) {
+        return `<img src="${escapeHtml(resolved)}" alt="${escapeHtml(alt)}">`;
+      }
+      pushDiagnostic(state, {
+        type: "unresolved-image-embed",
+        severity: "warning",
+        target,
+        message: `Image embed not found: ${target}`
+      });
+      return `<span class="missing-asset" role="note">Missing asset: ${escapeHtml(target || raw)}</span>`;
+    }
+    function renderMarkdownImage(alt, src, options, state) {
+      const target = normalizeImageTarget(src);
+      const resolved = resolveImageSource(target, options) || target;
+      if (!resolved) {
+        pushDiagnostic(state, {
+          type: "unresolved-image-embed",
+          severity: "warning",
+          target,
+          message: `Image target is empty: ${src}`
+        });
+        return `<span class="missing-asset" role="note">Missing asset</span>`;
+      }
+      return `<img src="${escapeHtml(resolved)}" alt="${escapeHtml(alt)}">`;
+    }
+    function renderMarkdownLink(label, href, options, state) {
+      const target = String(href || "").trim();
+      const safeLabel = inlineMarkdown(label, options, state);
+      if (/^(?:javascript:|data:text\/html)/i.test(target)) {
+        pushDiagnostic(state, {
+          type: "unsafe-link",
+          severity: "warning",
+          target,
+          message: `Unsafe link suppressed: ${target}`
+        });
+        return `<span class="missing-link">${safeLabel}</span>`;
+      }
+      return `<a href="${escapeHtml(target)}">${safeLabel}</a>`;
+    }
+    function resolveImageSource(target, options) {
+      if (typeof options.resolveImageEmbed === "function") {
+        return options.resolveImageEmbed(target);
+      }
+      for (const mapping of options.assetMappings || []) {
+        const aliases = mapping.aliases || [];
+        if (mapping.original === target || aliases.includes(target) || aliases.includes(normalizeImageTarget(target))) {
+          return mapping.relativeSrc;
+        }
+      }
+      return "";
+    }
+    function parseWikiLink(raw) {
+      const value = String(raw || "").trim();
+      const pipeIndex = value.indexOf("|");
+      const targetAndHeading = pipeIndex === -1 ? value : value.slice(0, pipeIndex);
+      const alias = pipeIndex === -1 ? "" : value.slice(pipeIndex + 1).trim();
+      const hashIndex = targetAndHeading.indexOf("#");
+      const target = (hashIndex === -1 ? targetAndHeading : targetAndHeading.slice(0, hashIndex)).trim();
+      const heading = hashIndex === -1 ? "" : targetAndHeading.slice(hashIndex + 1).trim();
+      return { raw: value, target, heading, alias };
+    }
+    function createRenderState(_options, diagnostics = []) {
+      const values = Array.isArray(diagnostics) ? diagnostics : [];
+      return {
+        diagnostics: values,
+        headingIds: /* @__PURE__ */ new Map(),
+        diagnosticKeys: new Set(values.map((item) => `${item.type}:${item.target || ""}:${item.heading || ""}`))
+      };
+    }
+    function pushDiagnostic(state, diagnostic) {
+      if (!state || !Array.isArray(state.diagnostics)) {
+        return;
+      }
+      const key = `${diagnostic.type}:${diagnostic.target || ""}:${diagnostic.heading || ""}`;
+      if (state.diagnosticKeys.has(key)) {
+        return;
+      }
+      state.diagnosticKeys.add(key);
+      state.diagnostics.push(diagnostic);
+    }
+    function buildHeadingId(text, state) {
+      const base = slugify2(text);
+      const count = state.headingIds.get(base) || 0;
+      state.headingIds.set(base, count + 1);
+      return count ? `${base}-${count + 1}` : base;
+    }
+    function stripInlineMarkdown(value) {
+      return String(value || "").replace(/!\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|([^\]]+))?]]/g, (_match, target, alias) => alias || target).replace(/\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|([^\]]+))?]]/g, (_match, target, alias) => alias || target).replace(/!\[([^\]]*)]\([^)]+\)/g, "$1").replace(/\[([^\]]+)]\([^)]+\)/g, "$1").replace(/[*_`]/g, "").trim();
+    }
+    function matchListLine(line) {
+      const match = /^(\s*)(?:(\d+)\.|[-*])\s+(.+)$/.exec(line || "");
+      if (!match) {
+        return null;
+      }
+      return {
+        indent: match[1].replace(/\t/g, "  ").length,
+        ordered: Boolean(match[2]),
+        content: match[3].trim()
+      };
+    }
+    function leadingSpaces(line) {
+      const match = /^(\s*)/.exec(line || "");
+      return match ? match[1].replace(/\t/g, "  ").length : 0;
+    }
+    function toClassSuffix(value) {
+      return String(value || "").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "text";
     }
     module2.exports = {
+      blocksToHtml,
       convertMarkdownToHtml: convertMarkdownToHtml2,
       inferTitle,
+      inlineMarkdown,
+      parseWikiLink,
       splitFrontmatter
     };
   }
@@ -2288,7 +2519,7 @@ ${article.html}
   </header>
   <section class="tools">
     <input id="filter" type="search" placeholder="Filter notes" aria-label="Filter notes">
-    <a href="safety-report.html">Safety report</a>
+    <a href="safety-report.html">Safety & diagnostics</a>
     <a href="publish-manifest.json">Manifest</a>
   </section>
   <section class="grid" id="pages">
@@ -2317,13 +2548,19 @@ input?.addEventListener('input', () => {
     <td>${escapeHtml([item.title, item.sourcePath].filter(Boolean).join(" - "))}</td>
     <td>${escapeHtml((item.reasons || []).join("; "))}</td>
   </tr>`).join("\n");
+      const diagnosticRows = pages.flatMap((page) => (page.diagnostics || []).map((item) => `<tr>
+    <td>${escapeHtml(item.severity || "info")}</td>
+    <td>${escapeHtml(page.title || page.sourcePath || "")}</td>
+    <td>${escapeHtml(item.type || "diagnostic")}</td>
+    <td>${escapeHtml(item.message || item.target || "")}</td>
+  </tr>`)).join("\n");
       return `<!doctype html>
 <html lang="ko">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Safety report - ${escapeHtml(options.siteTitle || "YSDA Publisher")}</title>
-<style>${indexCss()} table{width:100%;border-collapse:collapse;background:#fff}th,td{border-bottom:1px solid #d8dee8;padding:10px;text-align:left;vertical-align:top}</style>
+<style>${indexCss()} .table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;background:#fff;min-width:620px}th,td{border-bottom:1px solid #d8dee8;padding:10px;text-align:left;vertical-align:top}</style>
 </head>
 <body>
 <main>
@@ -2338,10 +2575,20 @@ input?.addEventListener('input', () => {
     </div>
   </header>
   <p><a href="index.html">Back to index</a></p>
+  <h2>Publish gate</h2>
+  <div class="table-wrap">
   <table>
     <thead><tr><th>Status</th><th>Source</th><th>Reason</th></tr></thead>
     <tbody>${rows || '<tr><td colspan="3">All scanned notes passed the safety gate.</td></tr>'}</tbody>
   </table>
+  </div>
+  <h2>Rendered-note diagnostics</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Severity</th><th>Page</th><th>Type</th><th>Message</th></tr></thead>
+    <tbody>${diagnosticRows || '<tr><td colspan="4">No rendered-note diagnostics.</td></tr>'}</tbody>
+  </table>
+  </div>
 </main>
 <footer>Generated by YSDA Publisher</footer>
 </body>
@@ -2350,14 +2597,18 @@ input?.addEventListener('input', () => {
     function addHeadingAnchors(html) {
       const used = /* @__PURE__ */ new Map();
       const headings = [];
-      const updated = String(html || "").replace(/<h([2-4])>([\s\S]*?)<\/h\1>/gi, (match, level, content) => {
+      const updated = String(html || "").replace(/<h([2-4])([^>]*)>([\s\S]*?)<\/h\1>/gi, (match, level, attrs, content) => {
         const text = stripTags(content).trim();
-        const base = slugify2(text);
-        const count = used.get(base) || 0;
-        used.set(base, count + 1);
-        const id = count ? `${base}-${count + 1}` : base;
+        const existing = /\sid=(["'])(.*?)\1/i.exec(attrs);
+        const base = existing && existing[2] ? existing[2] : slugify2(text);
+        const count = existing ? 0 : used.get(base) || 0;
+        if (!existing) {
+          used.set(base, count + 1);
+        }
+        const id = existing ? base : count ? `${base}-${count + 1}` : base;
         headings.push({ level: Number(level), text, id });
-        return `<h${level} id="${escapeHtml(id)}">${content}</h${level}>`;
+        const cleanAttrs = String(attrs || "").replace(/\sid=(["']).*?\1/i, "").trim();
+        return `<h${level}${cleanAttrs ? ` ${cleanAttrs}` : ""} id="${escapeHtml(id)}">${content}</h${level}>`;
       });
       return { html: updated, headings };
     }
@@ -2398,7 +2649,7 @@ body{margin:0;background:#f5f7fb;color:#1e293b;font-family:ui-sans-serif,system-
 main{max-width:1040px;margin:0 auto;padding:36px 22px 60px}
 .page-hero{padding:20px 0 28px;border-bottom:1px solid #d8dee8}
 .eyebrow,.source,.card-meta{color:#64748b;font-size:13px}
-h1{font-size:clamp(32px,5vw,52px);line-height:1.08;margin:10px 0 14px;color:#0f172a}
+h1{font-size:clamp(30px,5vw,52px);line-height:1.08;margin:10px 0 14px;color:#0f172a;overflow-wrap:anywhere}
 .meta,.tags{display:flex;flex-wrap:wrap;gap:8px 14px;color:#475569;font-size:14px}
 .tags span{border:1px solid #cbd5e1;background:#fff;padding:4px 8px;border-radius:999px}
 .toc{display:flex;flex-wrap:wrap;gap:8px 14px;margin:22px 0;padding:14px 0;border-bottom:1px solid #d8dee8}
@@ -2406,11 +2657,13 @@ h1{font-size:clamp(32px,5vw,52px);line-height:1.08;margin:10px 0 14px;color:#0f1
 .content{background:#fff;border:1px solid #d8dee8;border-radius:8px;padding:28px;overflow-wrap:anywhere}
 .content h1,.content h2,.content h3{color:#0f172a;line-height:1.2}.content h2{margin-top:36px;padding-top:16px;border-top:1px solid #e2e8f0}
 .content p,.content li{line-height:1.72}.content pre{overflow:auto;background:#111827;color:#f9fafb;padding:16px;border-radius:8px}.content code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-.content table{width:100%;border-collapse:collapse;margin:18px 0}.content th,.content td{border:1px solid #d8dee8;padding:8px 10px;text-align:left}.content img{max-width:100%;height:auto;border-radius:6px}
-.callout{border-left:4px solid #0f766e;background:#ecfdf5;padding:12px 16px;margin:18px 0;border-radius:6px}.callout-title{font-weight:700}
+.content .table-wrap{overflow-x:auto;margin:18px 0}.content table{width:100%;min-width:520px;border-collapse:collapse}.content th,.content td{border:1px solid #d8dee8;padding:8px 10px;text-align:left}.content img{max-width:100%;height:auto;border-radius:6px}
+.content blockquote{border-left:4px solid #94a3b8;margin:18px 0;padding:2px 0 2px 16px;color:#334155}.content hr{border:0;border-top:1px solid #d8dee8;margin:28px 0}.mermaid{background:#f8fafc!important;color:#0f172a!important;border:1px solid #d8dee8}
+.callout{border-left:4px solid #0f766e;background:#ecfdf5;padding:12px 16px;margin:18px 0;border-radius:6px}.callout-title{font-weight:700}.callout-warning,.callout-caution{border-color:#d97706;background:#fffbeb}.callout-important{border-color:#7c3aed;background:#f5f3ff}.callout-tip{border-color:#16a34a;background:#f0fdf4}.callout-info{border-color:#2563eb;background:#eff6ff}
+.missing-link,.missing-asset{display:inline-block;border:1px dashed #94a3b8;background:#f8fafc;color:#475569;border-radius:6px;padding:1px 6px}.missing-asset{margin:8px 0;padding:8px 10px}
 .page-nav{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:22px}.nav-link{display:block;border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:14px;color:#0f766e;text-decoration:none}
 footer{text-align:center;color:#64748b;padding:26px}
-@media(max-width:720px){main{padding:24px 14px}.content{padding:18px}.page-nav{grid-template-columns:1fr}.site-header{align-items:flex-start;flex-direction:column}}
+@media(max-width:720px){main{padding:24px 14px}.content{padding:18px}.page-nav{grid-template-columns:1fr}.site-header{align-items:flex-start;flex-direction:column}h1{font-size:clamp(28px,10vw,40px)}.toc{display:block}.toc a{display:block;margin-top:8px;padding-left:0}.callout{padding:10px 12px}}
 `;
     }
     function indexCss() {
@@ -2419,13 +2672,13 @@ body{margin:0;background:#f5f7fb;color:#1e293b;font-family:ui-sans-serif,system-
 main{max-width:1120px;margin:0 auto;padding:42px 22px 64px}
 .index-hero{padding:8px 0 28px;border-bottom:1px solid #d8dee8}
 .eyebrow,.source,.card-meta{color:#64748b;font-size:13px}
-h1{font-size:clamp(34px,6vw,60px);line-height:1.05;margin:8px 0 14px;color:#0f172a}
+h1{font-size:clamp(32px,6vw,60px);line-height:1.05;margin:8px 0 14px;color:#0f172a;overflow-wrap:anywhere}
 .index-hero p{max-width:760px;line-height:1.65}.summary,.tools{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.summary span,.tools a{border:1px solid #cbd5e1;background:#fff;border-radius:999px;padding:7px 10px;color:#334155;text-decoration:none}
 .tools{align-items:center;margin:22px 0}.tools input{min-width:min(340px,100%);border:1px solid #cbd5e1;border-radius:8px;padding:10px 12px;font:inherit}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.page-card{display:block;background:#fff;border:1px solid #d8dee8;border-radius:8px;padding:18px;text-decoration:none;color:#1e293b}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.page-card{display:block;background:#fff;border:1px solid #d8dee8;border-radius:8px;padding:18px;text-decoration:none;color:#1e293b;overflow-wrap:anywhere}
 .page-card:hover{border-color:#0f766e}.page-card strong{display:block;color:#0f172a;font-size:18px;margin:8px 0}.page-card p{line-height:1.55;color:#475569}
 footer{text-align:center;color:#64748b;padding:26px}
-@media(max-width:720px){main{padding:28px 14px}.tools{align-items:stretch;flex-direction:column}.tools input{width:100%;box-sizing:border-box}}
+@media(max-width:720px){main{padding:28px 14px}.tools{align-items:stretch;flex-direction:column}.tools input{width:100%;box-sizing:border-box}.grid{grid-template-columns:1fr}h1{font-size:clamp(30px,11vw,44px)}}
 `;
     }
     module2.exports = {
@@ -2512,6 +2765,7 @@ var require_webBookExport = __commonJS({
       const searchEntries = [];
       const pageHtmlBySlug = /* @__PURE__ */ new Map();
       const slugCounts = /* @__PURE__ */ new Map();
+      const candidates = [];
       for (const file of markdownFiles) {
         progress(`Checking ${file.path}...`);
         const markdown = await adapter.readText(file.path);
@@ -2534,6 +2788,17 @@ var require_webBookExport = __commonJS({
           continue;
         }
         const slug = buildWebBookSlug(file.path, sourceFolder, safety.metadata.title, slugCounts);
+        candidates.push({
+          file,
+          markdown,
+          safety,
+          slug,
+          duplicateSlug: slugCounts.get(slug) > 1
+        });
+      }
+      const noteIndex = buildNoteIndex(candidates, sourceFolder);
+      for (const candidate of candidates) {
+        const { file, markdown, safety, slug } = candidate;
         const pageFolder = joinPath(outputFolder, "pages", slug);
         const assetFolder = joinPath(pageFolder, "assets");
         const assetResult = await resolveImageAssets(markdown, {
@@ -2542,21 +2807,25 @@ var require_webBookExport = __commonJS({
           assetRelativePrefix: "assets",
           adapter
         });
-        if (assetResult.warnings.length > 0) {
-          skipped.push({
-            title: safety.metadata.title,
-            sourcePath: file.path,
-            status: "blocked",
-            visibility: safety.metadata.visibility,
-            reasons: assetResult.warnings,
-            warnings: safety.warnings
+        const diagnostics = [
+          ...safety.warnings.map((message) => ({ type: "publish-warning", severity: "info", message })),
+          ...assetResult.diagnostics
+        ];
+        if (candidate.duplicateSlug) {
+          diagnostics.push({
+            type: "duplicate-output-slug",
+            severity: "warning",
+            target: slug,
+            message: `Duplicate output slug was disambiguated: ${slug}`
           });
-          continue;
         }
         const converted = convertMarkdownToHtml2(markdown, {
           template: "ysda-web-book",
           trusted: false,
-          sourcePath: file.path
+          sourcePath: file.path,
+          assetMappings: assetResult.mappings,
+          diagnostics,
+          resolveWikiLink: buildWikiLinkResolver(noteIndex, slug)
         });
         const articleHtml = extractArticleHtml(rewriteHtmlImageSources2(converted, assetResult.mappings));
         const pageUrl = `pages/${slug}/`;
@@ -2570,7 +2839,11 @@ var require_webBookExport = __commonJS({
           updatedAt: file.mtime ? new Date(file.mtime).toISOString() : generatedAt,
           summary: safety.metadata.summary,
           readingTimeMinutes: estimateReadingTime(safety.body || markdown),
-          warnings: [...safety.warnings]
+          warnings: [
+            ...safety.warnings,
+            ...diagnostics.filter((item) => item.severity !== "info").map((item) => item.message)
+          ],
+          diagnostics
         };
         pages.push(pageRecord);
         searchEntries.push(buildSearchEntry(pageRecord, safety.body || markdown));
@@ -2641,13 +2914,32 @@ var require_webBookExport = __commonJS({
     async function resolveImageAssets(markdown, options) {
       const references = extractMarkdownImageReferences2(markdown);
       const warnings = [];
+      const diagnostics = [];
       const mappings = [];
       const usedNames = /* @__PURE__ */ new Set();
       for (const reference of references) {
         const target = String(reference.target || "");
+        if (isBlockedAssetTarget(target)) {
+          const message = `Blocked local image path: ${target}`;
+          warnings.push(message);
+          diagnostics.push({
+            type: "blocked-local-image-path",
+            severity: "warning",
+            target,
+            message
+          });
+          continue;
+        }
         const resolved = await options.adapter.resolveAsset(target, options.sourcePath);
         if (!resolved) {
-          warnings.push(`Image asset not found: ${target}`);
+          const message = `Image asset not found: ${target}`;
+          warnings.push(message);
+          diagnostics.push({
+            type: "unresolved-image-embed",
+            severity: "warning",
+            target,
+            message
+          });
           continue;
         }
         const assetFileName = buildAssetFileName2(resolved.path, mappings.length + 1, usedNames);
@@ -2667,7 +2959,7 @@ var require_webBookExport = __commonJS({
           ]
         });
       }
-      return { mappings, warnings };
+      return { mappings, warnings, diagnostics };
     }
     async function copyImageAssets(mappings, adapter) {
       const copied = /* @__PURE__ */ new Set();
@@ -2679,6 +2971,59 @@ var require_webBookExport = __commonJS({
         const data = await adapter.readBinary(mapping.sourcePath);
         await adapter.writeBinary(mapping.destinationPath, data);
       }
+    }
+    function buildNoteIndex(candidates, sourceFolder) {
+      const index = /* @__PURE__ */ new Map();
+      for (const candidate of candidates || []) {
+        const sourcePath = normalizePath2(candidate.file && candidate.file.path);
+        const relativePath = stripMarkdownExtension(sourcePath.replace(new RegExp(`^${escapeRegExp(normalizePath2(sourceFolder))}/?`), ""));
+        const title = candidate.safety && candidate.safety.metadata ? candidate.safety.metadata.title : "";
+        const keys = [
+          title,
+          sourcePath,
+          stripMarkdownExtension(sourcePath),
+          relativePath,
+          path.basename(relativePath),
+          path.basename(sourcePath, path.extname(sourcePath))
+        ];
+        for (const key of keys) {
+          const normalized = normalizeNoteLookupKey(key);
+          if (normalized && !index.has(normalized)) {
+            index.set(normalized, {
+              slug: candidate.slug,
+              title,
+              sourcePath
+            });
+          }
+        }
+      }
+      return index;
+    }
+    function buildWikiLinkResolver(noteIndex, currentSlug) {
+      return (link) => {
+        const targetKey = normalizeNoteLookupKey(link.target);
+        const page = noteIndex.get(targetKey);
+        if (!page) {
+          return null;
+        }
+        const hash = link.heading ? `#${slugify2(link.heading)}` : "";
+        const href = page.slug === currentSlug ? hash || "#" : `../${page.slug}/${hash}`;
+        return {
+          href,
+          title: page.title
+        };
+      };
+    }
+    function normalizeNoteLookupKey(value) {
+      return stripMarkdownExtension(normalizePath2(value)).replace(/^\/+|\/+$/g, "").trim().toLowerCase();
+    }
+    function stripMarkdownExtension(value) {
+      return String(value || "").replace(/\.md$/i, "");
+    }
+    function isBlockedAssetTarget(target) {
+      const value = String(target || "").trim();
+      const normalized = normalizePath2(value);
+      return path.isAbsolute(value) || /^[A-Za-z]:[\\/]/.test(value) || normalized.split("/").includes("..");
     }
     function createNodeWebBookAdapter(fs, rootDir = process.cwd()) {
       const root = path.resolve(rootDir);

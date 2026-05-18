@@ -29,18 +29,69 @@ Intro paragraph with [docs](https://example.com).
 | 1 | 2 |
 `;
 
+  const diagnostics = [];
   const html = convertMarkdownToHtml(markdown, {
     template: 'editorial',
     sourcePath: 'notes/Launch Plan.md',
+    diagnostics,
   });
 
-  assert.match(html, /<h1>Launch Plan<\/h1>/);
+  assert.match(html, /<h1 id="launch-plan">Launch Plan<\/h1>/);
   assert.match(html, /class="frontmatter"/);
   assert.match(html, /title: Launch Note/);
   assert.match(html, /class="callout callout-note"/);
   assert.match(html, /Keep the launch small\./);
-  assert.match(html, /<img src="diagram\.png" alt="diagram\.png">/);
+  assert.match(html, /class="missing-asset"/);
+  assert.equal(diagnostics.some((item) => item.type === 'unresolved-image-embed' && item.target === 'diagram.png'), true);
   assert.match(html, /<table>/);
+});
+
+test('local conversion supports wikilinks, anchors, callouts, mermaid, tables, nested lists, and escaping', () => {
+  const diagnostics = [];
+  const markdown = `# Compatibility
+
+See [[Some Note]], [[Some Note#Target Section|target]], [[Missing Note]], and [[#Local Section]].
+
+## Local Section
+
+> [!WARNING] Check
+> Do not leak <script>alert("x")</script>.
+
+\`\`\`mermaid
+flowchart TB
+  A --> B
+\`\`\`
+
+| A | B |
+|---|---|
+| 1 | \`two\` |
+
+- parent
+  - child
+
+\`\`\`js
+console.log("<safe>");
+\`\`\`
+`;
+
+  const html = convertMarkdownToHtml(markdown, {
+    template: 'minimal',
+    diagnostics,
+    resolveWikiLink: (link) => (link.target === 'Some Note' ? { href: `../some-note/${link.heading ? '#target-section' : ''}` } : null),
+  });
+
+  assert.match(html, /<h1 id="compatibility">Compatibility<\/h1>/);
+  assert.match(html, /href="\.\.\/some-note\/">Some Note<\/a>/);
+  assert.match(html, /href="\.\.\/some-note\/#target-section">target<\/a>/);
+  assert.match(html, /href="#local-section">Local Section<\/a>/);
+  assert.match(html, /class="missing-link"/);
+  assert.equal(diagnostics.some((item) => item.type === 'unresolved-wikilink' && item.target === 'Missing Note'), true);
+  assert.match(html, /class="callout callout-warning"/);
+  assert.match(html, /&lt;script&gt;alert/);
+  assert.match(html, /<pre class="mermaid">flowchart TB/);
+  assert.match(html, /<div class="table-wrap"><table>/);
+  assert.match(html, /<ul><li>parent\n<ul><li>child<\/li><\/ul><\/li><\/ul>/);
+  assert.match(html, /<code class="language-js">console\.log\(&quot;&lt;safe&gt;&quot;\);<\/code>/);
 });
 
 test('sanitized preview removes dynamic and external execution risks', () => {

@@ -127,6 +127,9 @@ title: Safe Note
 # Safe Note
 
 This reviewed note should export.
+It references [[Missing Note]] and a missing image:
+
+![[missing-image.png]]
 `);
     fs.writeFileSync(path.join(source, 'blocked.md'), `---
 publish: true
@@ -174,8 +177,17 @@ title: Draft Note
     assert.equal(manifest.exportedCount, 1);
     assert.equal(manifest.blockedCount, 1);
     assert.equal(manifest.skippedCount, 1);
+    assert.equal(manifest.pages[0].diagnostics.some((item) => item.type === 'unresolved-wikilink'), true);
+    assert.equal(manifest.pages[0].diagnostics.some((item) => item.type === 'unresolved-image-embed'), true);
     assert.equal(manifest.skipped.some((item) => item.sourcePath.endsWith('blocked.md') && item.status === 'blocked'), true);
     assert.equal(manifest.skipped.some((item) => item.sourcePath.endsWith('draft.md') && item.status === 'skipped'), true);
+
+    const safetyReport = JSON.parse(fs.readFileSync(path.join(output, 'safety-report.json'), 'utf8'));
+    assert.equal(safetyReport.pages[0].diagnostics.some((item) => item.message.includes('Missing Note')), true);
+
+    const pageHtml = fs.readFileSync(path.join(output, manifest.pages[0].url, 'index.html'), 'utf8');
+    assert.match(pageHtml, /missing-link/);
+    assert.match(pageHtml, /missing-asset/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

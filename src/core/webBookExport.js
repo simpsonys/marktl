@@ -80,6 +80,7 @@ async function exportWebBook(options = {}) {
   const searchEntries = [];
   const pageHtmlBySlug = new Map();
   const slugCounts = new Map();
+  const candidates = [];
 
   for (const file of markdownFiles) {
     progress(`Checking ${file.path}...`);
@@ -105,6 +106,19 @@ async function exportWebBook(options = {}) {
     }
 
     const slug = buildWebBookSlug(file.path, sourceFolder, safety.metadata.title, slugCounts);
+    candidates.push({
+      file,
+      markdown,
+      safety,
+      slug,
+      duplicateSlug: slugCounts.get(slug) > 1,
+    });
+  }
+
+  const noteIndex = buildNoteIndex(candidates, sourceFolder);
+
+  for (const candidate of candidates) {
+    const { file, markdown, safety, slug } = candidate;
     const pageFolder = joinPath(outputFolder, 'pages', slug);
     const assetFolder = joinPath(pageFolder, 'assets');
     const assetResult = await resolveImageAssets(markdown, {
@@ -114,22 +128,25 @@ async function exportWebBook(options = {}) {
       adapter,
     });
 
-    if (assetResult.warnings.length > 0) {
-      skipped.push({
-        title: safety.metadata.title,
-        sourcePath: file.path,
-        status: 'blocked',
-        visibility: safety.metadata.visibility,
-        reasons: assetResult.warnings,
-        warnings: safety.warnings,
+    const diagnostics = [
+      ...safety.warnings.map((message) => ({ type: 'publish-warning', severity: 'info', message })),
+      ...assetResult.diagnostics,
+    ];
+    if (candidate.duplicateSlug) {
+      diagnostics.push({
+        type: 'duplicate-output-slug',
+        severity: 'warning',
+        target: slug,
+        message: `Duplicate output slug was disambiguated: ${slug}`,
       });
-      continue;
     }
-
     const converted = convertMarkdownToHtml(markdown, {
       template: 'ysda-web-book',
       trusted: false,
       sourcePath: file.path,
+      assetMappings: assetResult.mappings,
+      diagnostics,
+      resolveWikiLink: buildWikiLinkResolver(noteIndex, slug),
     });
     const articleHtml = extractArticleHtml(rewriteHtmlImageSources(converted, assetResult.mappings));
     const pageUrl = `pages/${slug}/`;
@@ -143,7 +160,11 @@ async function exportWebBook(options = {}) {
       updatedAt: file.mtime ? new Date(file.mtime).toISOString() : generatedAt,
       summary: safety.metadata.summary,
       readingTimeMinutes: estimateReadingTime(safety.body || markdown),
-      warnings: [...safety.warnings],
+      warnings: [
+        ...safety.warnings,
+        ...diagnostics.filter((item) => item.severity !== 'info').map((item) => item.message),
+      ],
+      diagnostics,
     };
 
     pages.push(pageRecord);
@@ -220,14 +241,34 @@ async function exportWebBook(options = {}) {
 async function resolveImageAssets(markdown, options) {
   const references = extractMarkdownImageReferences(markdown);
   const warnings = [];
+  const diagnostics = [];
   const mappings = [];
   const usedNames = new Set();
 
   for (const reference of references) {
     const target = String(reference.target || '');
+    if (isBlockedAssetTarget(target)) {
+      const message = `Blocked local image path: ${target}`;
+      warnings.push(message);
+      diagnostics.push({
+        type: 'blocked-local-image-path',
+        severity: 'warning',
+        target,
+        message,
+      });
+      continue;
+    }
+
     const resolved = await options.adapter.resolveAsset(target, options.sourcePath);
     if (!resolved) {
-      warnings.push(`Image asset not found: ${target}`);
+      const message = `Image asset not found: ${target}`;
+      warnings.push(message);
+      diagnostics.push({
+        type: 'unresolved-image-embed',
+        severity: 'warning',
+        target,
+        message,
+      });
       continue;
     }
 
@@ -250,7 +291,7 @@ async function resolveImageAssets(markdown, options) {
     });
   }
 
-  return { mappings, warnings };
+  return { mappings, warnings, diagnostics };
 }
 
 async function copyImageAssets(mappings, adapter) {
@@ -263,6 +304,71 @@ async function copyImageAssets(mappings, adapter) {
     const data = await adapter.readBinary(mapping.sourcePath);
     await adapter.writeBinary(mapping.destinationPath, data);
   }
+}
+
+function buildNoteIndex(candidates, sourceFolder) {
+  const index = new Map();
+  for (const candidate of candidates || []) {
+    const sourcePath = normalizePath(candidate.file && candidate.file.path);
+    const relativePath = stripMarkdownExtension(sourcePath.replace(new RegExp(`^${escapeRegExp(normalizePath(sourceFolder))}/?`), ''));
+    const title = candidate.safety && candidate.safety.metadata ? candidate.safety.metadata.title : '';
+    const keys = [
+      title,
+      sourcePath,
+      stripMarkdownExtension(sourcePath),
+      relativePath,
+      path.basename(relativePath),
+      path.basename(sourcePath, path.extname(sourcePath)),
+    ];
+    for (const key of keys) {
+      const normalized = normalizeNoteLookupKey(key);
+      if (normalized && !index.has(normalized)) {
+        index.set(normalized, {
+          slug: candidate.slug,
+          title,
+          sourcePath,
+        });
+      }
+    }
+  }
+  return index;
+}
+
+function buildWikiLinkResolver(noteIndex, currentSlug) {
+  return (link) => {
+    const targetKey = normalizeNoteLookupKey(link.target);
+    const page = noteIndex.get(targetKey);
+    if (!page) {
+      return null;
+    }
+    const hash = link.heading ? `#${slugify(link.heading)}` : '';
+    const href = page.slug === currentSlug
+      ? (hash || '#')
+      : `../${page.slug}/${hash}`;
+    return {
+      href,
+      title: page.title,
+    };
+  };
+}
+
+function normalizeNoteLookupKey(value) {
+  return stripMarkdownExtension(normalizePath(value))
+    .replace(/^\/+|\/+$/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function stripMarkdownExtension(value) {
+  return String(value || '').replace(/\.md$/i, '');
+}
+
+function isBlockedAssetTarget(target) {
+  const value = String(target || '').trim();
+  const normalized = normalizePath(value);
+  return path.isAbsolute(value)
+    || /^[A-Za-z]:[\\/]/.test(value)
+    || normalized.split('/').includes('..');
 }
 
 function createNodeWebBookAdapter(fs, rootDir = process.cwd()) {
